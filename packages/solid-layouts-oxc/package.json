@@ -1,0 +1,49 @@
+{
+  "name": "solid-layouts-oxc",
+  "version": "0.1.0",
+  "description": "The Layouts pre-pass for SolidJS, built on oxc",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./loader": {
+      "default": "./loader.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "loader.js",
+    "loader.d.ts",
+    "*.node"
+  ],
+  "napi": {
+    "binaryName": "solid-layouts-oxc",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu"
+    ]
+  },
+  "scripts": {
+    "build": "napi build --platform --release --features napi",
+    "build:debug": "napi build --platform --features napi"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pathscale/solid-layouts.git",
+    "directory": "packages/solid-layouts-oxc"
+  }
+}
