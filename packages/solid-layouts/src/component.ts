@@ -221,11 +221,20 @@ export function defineComponent<R extends Recipe>(
 
     // `children()` rather than the raw prop: it memoises, so a layout can
     // reference `children` more than once. Raw `props.children` cannot.
-    const kids = resolveChildren(() => escape.children as JSX.Element);
+    //
+    // Built on first read rather than here, because `children()` is a memo and
+    // a memo computes immediately: creating it at this point constructs every
+    // child before the layout has rendered anything. A layout that provides a
+    // context then provides it to nobody — its children already exist, outside
+    // it — which is what `<Alert>` hit, its indicator throwing "must be used
+    // within <Alert>" while sitting inside one. Deferring lets the read happen
+    // under the provider.
+    let kids: (() => JSX.Element) | undefined;
 
     const stable = {
       slot,
       get children() {
+        if (!kids) kids = resolveChildren(() => escape.children as JSX.Element);
         return kids();
       },
     } as LayoutStable<R>;
@@ -277,7 +286,7 @@ export function defineComponent<R extends Recipe>(
       : createComponent(Dynamic, {
           component: element,
           get children() {
-            return kids();
+            return stable.children;
           },
           // Pass-through first, the recipe's attributes last: a caller may set
           // `id` or `aria-label`, but must not be able to overwrite the class

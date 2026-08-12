@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createRenderEffect, createRoot, createSignal } from "solid-js";
+import {
+  createContext,
+  createRenderEffect,
+  createRoot,
+  createSignal,
+  useContext,
+} from "solid-js";
+import type { JSX } from "solid-js";
+import { createComponent } from "solid-js/web";
 
 // Run these with `bun test --conditions=browser`, which the package script
 // does. Solid ships separate client and server builds behind export
@@ -490,6 +498,43 @@ describe("defineComponent: compound slots", () => {
     expect(String(attrs.class)).toContain("btn__icon");
     // The HTML follows the named slot rather than staying on `root`.
     expect(attrs.id).toBe("star");
+    dispose();
+  });
+});
+
+describe("defineComponent: a layout that provides a context", () => {
+  test("children are built inside the provider, not before it", () => {
+    // `children()` is a memo and a memo computes immediately, so resolving it
+    // when the component set up constructed every child before the layout had
+    // rendered anything. A layout providing a context provided it to nobody:
+    // <Alert>'s indicator threw "must be used within <Alert>" while sitting
+    // inside one.
+    const Ctx = createContext<string>();
+    let seenByChild: string | undefined = "not-run";
+
+    const Child = () => {
+      seenByChild = useContext(Ctx);
+      return null;
+    };
+
+    const Root = defineComponent({
+      recipe: button,
+      layout: ((stable: { children: JSX.Element }) =>
+        createComponent(Ctx.Provider, {
+          value: "from-the-layout",
+          get children() {
+            return stable.children;
+          },
+        })) as never,
+    });
+
+    const dispose = mount(Root, {
+      get children() {
+        return createComponent(Child, {});
+      },
+    });
+
+    expect(seenByChild).toBe("from-the-layout");
     dispose();
   });
 });
