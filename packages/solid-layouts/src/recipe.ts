@@ -2,6 +2,15 @@ import { cx } from "./cx";
 import type { RecipeConfig, SlotAttrs, VariantClasses } from "./types";
 
 /**
+ * Every declared slot, resolved.
+ *
+ * `root` is spelled out rather than left to the index signature because the
+ * config requires it, so every caller reaching for it would otherwise have to
+ * handle an `undefined` that cannot happen.
+ */
+export type ResolvedSlots = { root: SlotAttrs } & Record<string, SlotAttrs>;
+
+/**
  * The whole of a component's design vocabulary, in one declaration.
  *
  * `props` and `state` are separate because they come from different places:
@@ -27,7 +36,7 @@ export type Recipe<C extends RecipeConfig = RecipeConfig> = {
   resolve(
     selection: Record<string, unknown>,
     overrides?: string,
-  ): Record<string, SlotAttrs>;
+  ): ResolvedSlots;
   /** Derives a new recipe from this one. See `extend` below. */
   extend<E extends Partial<RecipeConfig>>(patch: E): Recipe<RecipeConfig>;
 };
@@ -78,7 +87,7 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
   function resolve(
     selection: Record<string, unknown>,
     overrides?: string,
-  ): Record<string, SlotAttrs> {
+  ): ResolvedSlots {
     const out: Record<string, SlotAttrs> = {};
 
     for (const slot of slotNames) {
@@ -130,7 +139,7 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
       out[slot] = attrs;
     }
 
-    return out;
+    return out as ResolvedSlots;
   }
 
   /**

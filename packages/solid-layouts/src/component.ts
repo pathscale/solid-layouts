@@ -142,7 +142,9 @@ export function defineComponent<R extends Recipe>(
     const slot = {} as Record<string, SlotAttrs>;
     for (const name of slotNames) {
       Object.defineProperty(slot, name, {
-        get: () => resolved()[name],
+        // Non-null because `slotNames` and `resolve` iterate the same
+        // `recipe.config.slots`, so a declared slot always resolves.
+        get: () => resolved()[name] as SlotAttrs,
         enumerable: true,
       });
     }

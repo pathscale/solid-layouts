@@ -81,18 +81,18 @@ describe("recipe", () => {
   test("the consumer override merges last, into the root only", () => {
     const resolved = accordionTrigger.resolve({}, "my-app-thing");
     expect(resolved.root.class.endsWith("my-app-thing")).toBe(true);
-    expect(resolved.indicator.class).not.toContain("my-app-thing");
+    expect(resolved.indicator!.class).not.toContain("my-app-thing");
   });
 
   test("a non-root slot qualifies the component name", () => {
-    const { indicator } = accordionTrigger.resolve({});
-    expect(indicator["data-slot"]).toBe("accordion-trigger-indicator");
+    const indicatorSlot = accordionTrigger.resolve({}).indicator;
+    expect(indicatorSlot!["data-slot"]).toBe("accordion-trigger-indicator");
   });
 
   test("one state can reach several slots", () => {
-    const { root, indicator } = accordionTrigger.resolve({ expanded: true });
+    const { root, indicator: indicatorSlot } = accordionTrigger.resolve({ expanded: true });
     expect(root.class).toBe("accordion__trigger accordion__trigger--expanded");
-    expect(indicator.class).toBe(
+    expect(indicatorSlot!.class).toBe(
       "accordion__indicator accordion__indicator--expanded",
     );
   });
@@ -104,9 +104,9 @@ describe("recipe", () => {
       slots: { root: { base: "x" }, tail: { base: "x__tail" } },
       state: { on: { true: "x--on" } },
     });
-    const { root, tail } = twoSlot.resolve({ on: true });
+    const { root, tail: tailSlot } = twoSlot.resolve({ on: true });
     expect(root.class).toBe("x x--on");
-    expect(tail.class).toBe("x__tail");
+    expect(tailSlot!.class).toBe("x__tail");
   });
 
   test("a name declared as both a prop and state is rejected at build time", () => {
