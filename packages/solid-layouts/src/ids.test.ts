@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createRoot } from "solid-js";
 import { defineComponent } from "./component";
-import { nextInstance, resetInstances, slotId } from "./ids";
+import { __nextInstance, __resetInstances, __slotId } from "./ids";
 import { parityCompiled } from "./__parity__/parity.compiled";
 import { recipe } from "./recipe";
 import type { CompiledRecipe, RecipeConfig } from "./types";
 
-afterEach(resetInstances);
+afterEach(__resetInstances);
 
 describe("slot ids", () => {
   test("the compiler assigns an index per slot", () => {
@@ -18,19 +18,19 @@ describe("slot ids", () => {
   });
 
   test("an id is the slot index and the instance", () => {
-    expect(slotId({ root: 7 }, "root", 3)).toBe("7-3");
+    expect(__slotId({ root: 7 }, "root", 3)).toBe("7-3");
   });
 
   test("an uncompiled recipe yields no id rather than inventing one", () => {
     // An id whose shape depended on whether the compiler ran would break
     // aria-controls in exactly the builds nobody tests.
-    expect(slotId(undefined, "root", 0)).toBeUndefined();
-    expect(slotId({ root: 1 }, "missing", 0)).toBeUndefined();
+    expect(__slotId(undefined, "root", 0)).toBeUndefined();
+    expect(__slotId({ root: 1 }, "missing", 0)).toBeUndefined();
   });
 
   test("instances are distinct and monotonic", () => {
-    const a = nextInstance();
-    const b = nextInstance();
+    const a = __nextInstance();
+    const b = __nextInstance();
     expect(b).toBe(a + 1);
   });
 });

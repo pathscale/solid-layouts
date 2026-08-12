@@ -1,5 +1,7 @@
 export { cx } from "./cx";
-export { nextInstance, resetInstances, slotId } from "./ids";
+// `./ids` is deliberately not re-exported. Instance numbering is the runtime's
+// own bookkeeping: nothing outside it should mint an id, and exporting the
+// counter invites someone to reset it in the middle of a render.
 export { recipe, type Recipe } from "./recipe";
 export {
   configureUI,

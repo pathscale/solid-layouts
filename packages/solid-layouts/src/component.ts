@@ -10,7 +10,7 @@ import {
 import { Dynamic, createComponent } from "solid-js/web";
 import type { ComponentDefaults, UIConfig } from "./defaults";
 import { globalDefaultsFor } from "./defaults";
-import { nextInstance, slotId } from "./ids";
+import { __nextInstance, __slotId } from "./ids";
 import type { Recipe } from "./recipe";
 import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types";
 
@@ -111,7 +111,7 @@ export function defineComponent<R extends Recipe>(
 
   return function LayoutComponent(props) {
     const subtree = useContext(UIDefaultsContext);
-    const instance = nextInstance();
+    const instance = __nextInstance();
     /**
      * The id of one of this instance's slots, for aria wiring.
      *
@@ -124,7 +124,7 @@ export function defineComponent<R extends Recipe>(
       if (typeof given === "string") {
         return slot === "root" ? given : `${given}-${slot}`;
       }
-      return slotId(compiled?.slotIds, slot, instance);
+      return __slotId(compiled?.slotIds, slot, instance);
     };
 
     // Four-way split by destination. What the recipe declares is presentation;

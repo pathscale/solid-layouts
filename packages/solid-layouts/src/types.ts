@@ -45,6 +45,11 @@ export type RecipeConfig = {
   /**
    * Written by the compiler, never by hand.
    *
+   * The `__` prefix is the convention on this boundary: such a name is
+   * written by the compiler, read by the runtime, and carries no stability
+   * guarantee between versions. Hand-writing one couples your code to an
+   * internal shape that will change without notice.
+   *
    * The same information as `slots`, `props` and `state`, arranged so it can
    * be indexed instead of walked: slot, then variant axis, then value, to the
    * class that combination contributes. Deciding at compile time which slot a

@@ -15,7 +15,7 @@
 let counter = 0;
 
 /** The next instance number. Monotonic for the life of the document. */
-export function nextInstance(): number {
+export function __nextInstance(): number {
   return counter++;
 }
 
@@ -25,7 +25,7 @@ export function nextInstance(): number {
  * Exists for tests. Ids that keep climbing across cases make a snapshot
  * depend on what ran before it.
  */
-export function resetInstances(): void {
+export function __resetInstances(): void {
   counter = 0;
 }
 
@@ -36,7 +36,7 @@ export function resetInstances(): void {
  * the compiler ran would break `aria-controls` in exactly the builds nobody
  * tests.
  */
-export function slotId(
+export function __slotId(
   slotIds: Record<string, number> | undefined,
   slot: string,
   instance: number,
