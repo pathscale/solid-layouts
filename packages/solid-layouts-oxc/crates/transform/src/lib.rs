@@ -14,6 +14,8 @@
 //! Deleting this pass must always leave working code. If removing it changes
 //! behaviour rather than size, the design is wrong and the phase does not ship.
 
+pub mod match_layouts;
+
 use layouts_common::{Diagnostic, FileKind, TransformOptions, TransformResult};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -58,6 +60,12 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
             changed: false,
         };
     }
+
+    // Every component the user wrote must resolve to a Layout. An unmatched
+    // one is a hard error rather than a fall-through, because emitting a
+    // component whose presentation nobody declared is the outcome the design
+    // exists to prevent.
+    diagnostics.extend(match_layouts::check(&parsed.program, &options.config));
 
     let layouts = find_layouts(&parsed.program);
 
