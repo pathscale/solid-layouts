@@ -189,7 +189,20 @@ export function defineComponent<R extends Recipe>(
       Object.defineProperty(slot, name, {
         // Non-null because `slotNames` and `resolve` iterate the same
         // `recipe.config.slots`, so a declared slot always resolves.
-        get: () => resolved()[name] as SlotAttrs,
+        //
+        // The root slot also carries the plain-HTML props. Without this a
+        // component with a layout drops them: the no-layout path spreads
+        // `passthrough` onto the element itself, but a layout only ever sees
+        // `slot`, so `<Badge.Anchor id="x" onClick={...}>` rendered neither.
+        // Recipe attributes go on top, so a caller still cannot overwrite the
+        // class or the `data-slot` that identifies the component.
+        get: () =>
+          name === "root"
+            ? ({
+                ...asAttributes(passthrough as Record<string, unknown>),
+                ...(resolved()[name] as SlotAttrs),
+              } as SlotAttrs)
+            : (resolved()[name] as SlotAttrs),
         enumerable: true,
       });
     }

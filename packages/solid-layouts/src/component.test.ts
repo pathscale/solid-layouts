@@ -427,3 +427,45 @@ describe("defineComponent: what p unwraps", () => {
     dispose();
   });
 });
+
+describe("defineComponent: layouts and plain HTML", () => {
+  test("the root slot carries the caller's HTML props", () => {
+    // A layout only ever sees `slot`, so without the root slot carrying them
+    // `id` and `onClick` reached nothing at all — the no-layout path spreads
+    // them onto the element, and the layout path had no equivalent.
+    let root: SlotAttrs | undefined;
+    const Badge = defineComponent({
+      recipe: button,
+      layout: ((stable: { slot: Record<string, SlotAttrs> }) => {
+        root = stable.slot.root;
+        return null;
+      }) as never,
+    });
+
+    const handler = () => {};
+    const dispose = mount(Badge, { id: "save", onClick: handler });
+
+    const attrs = root as unknown as Record<string, unknown>;
+    expect(attrs.id).toBe("save");
+    expect(attrs.onClick).toBe(handler);
+    // The recipe still wins where they collide.
+    expect(String(attrs.class)).toContain("btn");
+    dispose();
+  });
+
+  test("a caller cannot overwrite the class or the slot marker", () => {
+    let root: SlotAttrs | undefined;
+    const Badge = defineComponent({
+      recipe: button,
+      layout: ((stable: { slot: Record<string, SlotAttrs> }) => {
+        root = stable.slot.root;
+        return null;
+      }) as never,
+    });
+
+    const dispose = mount(Badge, { "data-slot": "not-a-button" });
+    const attrs = root as unknown as Record<string, unknown>;
+    expect(attrs["data-slot"]).toBe("button");
+    dispose();
+  });
+});
