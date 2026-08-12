@@ -255,6 +255,85 @@ pub fn table(recipe: &Recipe) -> String {
     out
 }
 
+/// The stable index assigned to each `(component, slot)` pair.
+///
+/// Assigned ahead of time because the compiler sees every recipe in the
+/// program, so nothing has to register itself at runtime to be addressable.
+/// An instance id is then `${index}-${counter}`, and the runtime's whole job
+/// is incrementing the counter rather than building a string per mount.
+///
+/// Ordering is by component name, then by declared slot order. Sorting by
+/// component keeps indices stable when an unrelated file is added, which a
+/// discovery-ordered scheme would not: one new file would renumber everything
+/// after it and invalidate any manifest built against the old numbering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotIndex {
+    pub entries: Vec<(String, String, u32)>,
+}
+
+impl SlotIndex {
+    pub fn build(recipes: &[Recipe]) -> Self {
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        for recipe in recipes {
+            for (slot, _) in &recipe.slots {
+                pairs.push((recipe.component.clone(), slot.clone()));
+            }
+        }
+        pairs.sort();
+        pairs.dedup();
+
+        let entries = pairs
+            .into_iter()
+            .enumerate()
+            .map(|(index, (component, slot))| (component, slot, index as u32))
+            .collect();
+
+        Self { entries }
+    }
+
+    pub fn lookup(&self, component: &str, slot: &str) -> Option<u32> {
+        self.entries
+            .iter()
+            .find(|(c, s, _)| c == component && s == slot)
+            .map(|(_, _, index)| *index)
+    }
+
+    /// The index-to-name mapping, for tooling that has only the DOM.
+    ///
+    /// This is what lets an agent or a devtool resolve `data-slot="7"` back to
+    /// `accordion-item-trigger` without the document carrying the long form,
+    /// and without anything enumerating components at runtime.
+    pub fn manifest(&self) -> String {
+        let mut out = String::from("{");
+        for (index, (component, slot, id)) in self.entries.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            let name = if slot == "root" {
+                component.clone()
+            } else {
+                format!("{component}-{slot}")
+            };
+            out.push_str(&format!("\"{id}\":{}", json_string(&name)));
+        }
+        out.push('}');
+        out
+    }
+}
+
+/// The per-slot ids for one recipe, in its declared slot order.
+pub fn slot_ids(recipe: &Recipe, index: &SlotIndex) -> String {
+    let ids: Vec<String> = recipe
+        .slots
+        .iter()
+        .map(|(slot, _)| {
+            let id = index.lookup(&recipe.component, slot).unwrap_or(0);
+            format!("{}:{id}", json_string(slot))
+        })
+        .collect();
+    format!("{{{}}}", ids.join(","))
+}
+
 /// The state keys that mirror to `data-*`, in declaration order.
 pub fn state_keys(recipe: &Recipe) -> String {
     let names: Vec<String> = recipe.state.iter().map(|a| json_string(&a.name)).collect();
@@ -503,6 +582,77 @@ mod emit_tests {
             "const r = recipe({\n\tcomponent: \"x\",\n\tslots: { root: {} },\n\n});",
         ] {
             assert_emits_valid(source);
+        }
+    }
+}
+
+#[cfg(test)]
+mod id_tests {
+    use super::*;
+    use oxc_allocator::Allocator;
+    use oxc_parser::Parser;
+    use oxc_span::SourceType;
+
+    fn recipes(source: &str) -> Vec<Recipe> {
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        find_recipes(&parsed.program)
+    }
+
+    const TWO: &str = r#"
+        const a = recipe({ component: "alpha", slots: { root: {}, tail: {} } });
+        const b = recipe({ component: "beta", slots: { root: {} } });
+    "#;
+
+    #[test]
+    fn every_component_slot_pair_gets_one_index() {
+        let index = SlotIndex::build(&recipes(TWO));
+        assert_eq!(index.entries.len(), 3);
+
+        let mut ids: Vec<u32> = index.entries.iter().map(|(_, _, id)| *id).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 3, "indices must be unique");
+    }
+
+    #[test]
+    fn indices_do_not_depend_on_declaration_order() {
+        // Ordered by component name, so adding an unrelated file does not
+        // renumber everything after it and invalidate a manifest built
+        // against the old numbering.
+        let forward = SlotIndex::build(&recipes(TWO));
+        let reversed = SlotIndex::build(&recipes(
+            r#"
+            const b = recipe({ component: "beta", slots: { root: {} } });
+            const a = recipe({ component: "alpha", slots: { root: {}, tail: {} } });
+            "#,
+        ));
+        assert_eq!(forward.entries, reversed.entries);
+    }
+
+    #[test]
+    fn the_manifest_maps_an_index_back_to_a_name() {
+        let index = SlotIndex::build(&recipes(TWO));
+        let manifest = index.manifest();
+
+        // Root is the bare component name; other slots are qualified. This is
+        // what lets tooling with only the DOM resolve `data-slot` without
+        // anything enumerating components at runtime.
+        assert!(manifest.contains(r#":"alpha""#), "{manifest}");
+        assert!(manifest.contains(r#":"alpha-tail""#), "{manifest}");
+        assert!(manifest.contains(r#":"beta""#), "{manifest}");
+    }
+
+    #[test]
+    fn a_recipes_slot_ids_match_the_shared_index() {
+        let all = recipes(TWO);
+        let index = SlotIndex::build(&all);
+        let emitted = slot_ids(&all[0], &index);
+
+        for (slot, _) in &all[0].slots {
+            let id = index.lookup("alpha", slot).expect("indexed");
+            assert!(emitted.contains(&format!("\"{slot}\":{id}")), "{emitted}");
         }
     }
 }

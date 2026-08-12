@@ -1,4 +1,5 @@
 export { cx } from "./cx";
+export { nextInstance, resetInstances, slotId } from "./ids";
 export { recipe, type Recipe } from "./recipe";
 export {
   configureUI,

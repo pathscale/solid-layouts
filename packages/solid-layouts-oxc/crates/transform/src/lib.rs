@@ -124,6 +124,12 @@ fn compile_recipes(source: &str, program: &Program<'_>) -> String {
         return source.to_owned();
     }
 
+    // Indices are assigned across every recipe the compiler can see. Within a
+    // single file that is this file's recipes; a whole-program build passes
+    // the full set, and the numbering is by component name so adding an
+    // unrelated file does not renumber the ones already emitted.
+    let index = compile_recipe::SlotIndex::build(&recipes);
+
     let mut edits: Vec<(usize, String)> = recipes
         .iter()
         .map(|recipe| {
@@ -141,9 +147,10 @@ fn compile_recipes(source: &str, program: &Program<'_>) -> String {
             };
 
             let addition = format!(
-                "{separator}__compiled:{{slots:{},stateKeys:{}}}",
+                "{separator}__compiled:{{slots:{},stateKeys:{},slotIds:{}}}",
                 compile_recipe::table(recipe),
                 compile_recipe::state_keys(recipe),
+                compile_recipe::slot_ids(recipe, &index),
             );
             (at, addition)
         })

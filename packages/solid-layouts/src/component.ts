@@ -10,6 +10,7 @@ import {
 import { Dynamic, createComponent } from "solid-js/web";
 import type { ComponentDefaults, UIConfig } from "./defaults";
 import { globalDefaultsFor } from "./defaults";
+import { nextInstance, slotId } from "./ids";
 import type { Recipe } from "./recipe";
 import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types";
 
@@ -95,8 +96,13 @@ export function defineComponent<R extends Recipe>(
   const stateKeys = Object.keys(recipe.config.state ?? {});
   const slotNames = Object.keys(recipe.config.slots);
 
+  const compiled = recipe.config.__compiled;
+
   return function LayoutComponent(props) {
     const subtree = useContext(UIDefaultsContext);
+    const instance = nextInstance();
+    /** The id of one of this instance's slots, for aria wiring. */
+    const idOf = (slot: string) => slotId(compiled?.slotIds, slot, instance);
 
     // Three-way split by origin: what the recipe declares is presentation, the
     // universal four are the consumer's escape hatches, and everything left is
@@ -107,7 +113,17 @@ export function defineComponent<R extends Recipe>(
       ["class", "className", "style", "children"],
     );
 
-    const model = setup ? setup(behaviour) : undefined;
+    // `slotId` reaches the logic as well as the layout: an accordion item has
+    // to hand its trigger's id to `aria-controls` on the panel, and that is a
+    // behavioural fact rather than a presentational one.
+    const model = setup
+      ? setup(
+          Object.defineProperty(behaviour as Record<string, unknown>, "slotId", {
+            value: idOf,
+            enumerable: false,
+          }) as Record<string, unknown>,
+        )
+      : undefined;
 
     /** Lowest precedence first: library, app, subtree, call site. */
     const presentationValue = (key: string): unknown => {
@@ -183,6 +199,7 @@ export function defineComponent<R extends Recipe>(
       get: () => escape.style,
       enumerable: true,
     });
+    Object.defineProperty(p, "slotId", { value: idOf, enumerable: false });
 
     const rendered = layout
       ? layout(stable, p as never)

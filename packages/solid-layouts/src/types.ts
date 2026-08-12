@@ -68,6 +68,15 @@ export type CompiledRecipe = {
   slots: Record<string, CompiledSlot>;
   /** The axes that mirror to `data-*`. Declaration order. */
   stateKeys: string[];
+  /**
+   * The stable index the compiler assigned to each slot.
+   *
+   * Assigned ahead of time across every recipe the compiler saw, so nothing
+   * registers itself to become addressable. An instance id is then
+   * `${slotIds[name]}-${counter}`, which makes the runtime's contribution a
+   * counter increment rather than string building on every mount.
+   */
+  slotIds: Record<string, number>;
 };
 
 /** The attributes a resolved slot contributes to its element. */
