@@ -39,9 +39,36 @@ mod binding {
         pub failed: bool,
     }
 
+    /// What a host can configure.
+    ///
+    /// `layouts` names the modules a component may be imported from. It
+    /// defaults to `["@pathscale/ui"]`, which is right for an app installing
+    /// the library and wrong for a repository that vendors it: a relative or
+    /// aliased import is treated as the user's own code and allowed through
+    /// unchecked, so a bundled UI silently gets no checking at all. Such a
+    /// repository sets this to the path it keeps the library under.
+    #[napi(object)]
+    pub struct JsOptions {
+        pub layouts: Option<Vec<String>>,
+        pub parse_only: Option<bool>,
+    }
+
     #[napi]
-    pub fn transform(source: String, filename: String) -> JsTransformResult {
-        let options = layouts_common::TransformOptions::new(filename);
+    pub fn transform(
+        source: String,
+        filename: String,
+        options: Option<JsOptions>,
+    ) -> JsTransformResult {
+        let mut options_inner = layouts_common::TransformOptions::new(filename);
+        if let Some(given) = options {
+            if let Some(layouts) = given.layouts {
+                options_inner.config.layouts = layouts;
+            }
+            if let Some(parse_only) = given.parse_only {
+                options_inner.parse_only = parse_only;
+            }
+        }
+        let options = options_inner;
         let result = layouts_transform::transform(&source, &options);
         let lines = layouts_common::LineIndex::new(&source);
 

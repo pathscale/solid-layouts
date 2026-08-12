@@ -19,9 +19,19 @@ module.exports = function layoutsLoader(source) {
   const callback = this.async();
   const filename = this.resourcePath;
 
+  // Whatever the rspack rule set on the loader. A repository that vendors the
+  // library rather than installing it has to name the path it keeps it under,
+  // or every component import looks like the user's own code and is allowed
+  // through unchecked.
+  const options =
+    typeof this.getOptions === "function" ? this.getOptions() || {} : {};
+
   let result;
   try {
-    result = transform(source, filename);
+    result = transform(source, filename, {
+      layouts: options.layouts,
+      parseOnly: options.parseOnly,
+    });
   } catch (error) {
     // A panic in the pass is a bug in the pass, not in the user's code. Say so,
     // rather than reporting it against whatever file happened to be in flight.
