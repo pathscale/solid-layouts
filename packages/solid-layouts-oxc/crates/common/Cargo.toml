@@ -1,0 +1,10 @@
+[package]
+name = "layouts-common"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+oxc_span = { workspace = true }
+serde = { workspace = true }

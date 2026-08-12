@@ -1,0 +1,72 @@
+[package]
+name = "solid-layouts-oxc"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+description = "The Layouts pre-pass for SolidJS, built on oxc"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# The Node binding is opt-in so the crate builds, tests and benchmarks as pure
+# Rust with no JS runtime in the loop. `solid-jsx-oxc` does the same, and it is
+# what keeps `cargo test` honest: the transform is testable without napi, node
+# or a bundler anywhere near it.
+napi = ["dep:napi", "dep:napi-derive"]
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.dependencies]
+# Pinned deliberately and bumped deliberately. `oxc_traverse`'s own docs
+# describe it as codegen-generated and internally steered, so treat a version
+# bump as a change to review rather than a routine update. solid-jsx-oxc sits
+# on 0.113.0 while current is 0.144.0, which is the churn this guards against.
+oxc_allocator = "=0.144.0"
+oxc_ast = "=0.144.0"
+oxc_ast_visit = "=0.144.0"
+oxc_codegen = "=0.144.0"
+oxc_parser = "=0.144.0"
+oxc_semantic = "=0.144.0"
+oxc_span = "=0.144.0"
+oxc_syntax = "=0.144.0"
+oxc_traverse = "=0.144.0"
+
+napi = { version = "3.12.1", features = ["napi9"] }
+napi-derive = "3.6.3"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+layouts-common = { path = "crates/common" }
+layouts-transform = { path = "crates/transform" }
+
+[dependencies]
+napi = { workspace = true, optional = true }
+napi-derive = { workspace = true, optional = true }
+
+layouts-common = { workspace = true }
+layouts-transform = { workspace = true }
+
+oxc_allocator = { workspace = true }
+oxc_codegen = { workspace = true }
+oxc_parser = { workspace = true }
+oxc_span = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[build-dependencies]
+napi-build = "2.4.1"
+
+[dev-dependencies]
+insta = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
