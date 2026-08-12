@@ -21,4 +21,4 @@ export const parityCompiled = recipe({
     open: { true: { root: "p--open", icon: "p__icon--open" } },
     busy: { true: "p--busy" },
   },
-__compiled:{slots:{"root":{base:"p",axes:{"tone":{"neutral":"p--neutral","loud":"p--loud"},"flush":{"true":"p--flush"},"open":{"true":"p--open"},"busy":{"true":"p--busy"}}},"icon":{base:"p__icon",axes:{"open":{"true":"p__icon--open"}}},"bare":{base:"",axes:{}}},stateKeys:["open","busy"],slotIds:{"root":2,"icon":1,"bare":0}}});
+_layouts:{slots:{"root":{base:"p",axes:{"tone":{"neutral":"p--neutral","loud":"p--loud"},"flush":{"true":"p--flush"},"open":{"true":"p--open"},"busy":{"true":"p--busy"}}},"icon":{base:"p__icon",axes:{"open":{"true":"p__icon--open"}}},"bare":{base:"",axes:{}}},stateKeys:["open","busy"],slotIds:{"root":2,"icon":1,"bare":0}}});

@@ -147,7 +147,7 @@ fn compile_recipes(source: &str, program: &Program<'_>) -> String {
             };
 
             let addition = format!(
-                "{separator}__compiled:{{slots:{},stateKeys:{},slotIds:{}}}",
+                "{separator}_layouts:{{slots:{},stateKeys:{},slotIds:{}}}",
                 compile_recipe::table(recipe),
                 compile_recipe::state_keys(recipe),
                 compile_recipe::slot_ids(recipe, &index),

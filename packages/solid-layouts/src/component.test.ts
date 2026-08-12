@@ -339,3 +339,59 @@ describe("defineComponent: identity", () => {
     dispose();
   });
 });
+
+describe("defineComponent: what p unwraps", () => {
+  test("a model member that is a function is returned, not called", () => {
+    // The bug this exists to prevent: unwrapping everything meant an event
+    // handler was invoked with no arguments the moment a layout read it, and
+    // `p.setTyped` came back as `undefined` rather than as the handler.
+    let seen: unknown;
+    let calls = 0;
+    const Button = defineComponent({
+      recipe: button,
+      setup: () => ({
+        loading: () => false,
+        onPress: () => {
+          calls += 1;
+        },
+      }),
+      layout: ((_s: unknown, p: Record<string, unknown>) => {
+        seen = p.onPress;
+        return null;
+      }) as never,
+    });
+
+    const dispose = mount(Button);
+    expect(typeof seen).toBe("function");
+    expect(calls).toBe(0);
+    dispose();
+  });
+
+  test("a declared state key is still unwrapped to its value", () => {
+    const { seen, layout } = capturing();
+    const Button = defineComponent({
+      recipe: button,
+      setup: () => ({ loading: () => true }),
+      layout: layout as never,
+    });
+
+    const dispose = mount(Button);
+    expect(seen.p?.loading).toBe(true);
+    dispose();
+  });
+
+  test("the context is not exposed on p", () => {
+    // It is assembly, handed to the provider by defineComponent. A layout
+    // reading it would be reaching around the boundary.
+    const { seen, layout } = capturing();
+    const Button = defineComponent({
+      recipe: button,
+      setup: () => ({ context: { secret: 1 } }),
+      layout: layout as never,
+    });
+
+    const dispose = mount(Button);
+    expect(seen.p).not.toHaveProperty("context");
+    dispose();
+  });
+});

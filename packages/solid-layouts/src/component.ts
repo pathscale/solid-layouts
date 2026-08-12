@@ -22,10 +22,10 @@ import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types";
  * everything handed to a layout is reactive: `slot` is a stable object and
  * `children` is resolved once. Putting those two in their own parameter makes
  * `{...slot.root}` and `{children}` safe to destructure, while everything
- * reactive stays behind `p` where the read is visible at the point of use.
+ * reactive stays behind `props`, where the read is visible at the point of use.
  *
- * Written as one parameter, `const { slot, children, expanded } = p` would
- * look uniform and silently stop `expanded` updating.
+ * Written as one parameter, `const { slot, children, expanded } = props`
+ * would look uniform and silently stop `expanded` updating.
  */
 export type LayoutStable<R> = {
   slot: Record<SlotsOf<R> & string, SlotAttrs>;
@@ -34,7 +34,7 @@ export type LayoutStable<R> = {
 
 export type Layout<R> = (
   stable: LayoutStable<R>,
-  p: PropsOf<R> & StateOf<R> & Record<string, unknown>,
+  props: PropsOf<R> & StateOf<R> & Record<string, unknown>,
 ) => JSX.Element;
 
 /** Subtree-scoped defaults. The layer `configureUI` cannot express. */
@@ -107,7 +107,7 @@ export function defineComponent<R extends Recipe>(
   const stateKeys = Object.keys(recipe.config.state ?? {});
   const slotNames = Object.keys(recipe.config.slots);
 
-  const compiled = recipe.config.__compiled;
+  const compiled = recipe.config._layouts;
 
   return function LayoutComponent(props) {
     const subtree = useContext(UIDefaultsContext);
@@ -207,16 +207,18 @@ export function defineComponent<R extends Recipe>(
 
     // Presentation reads resolve through the cascade; state reads unwrap the
     // model's accessors. Both are getters, which is what lets a layout say
-    // `p.expanded` instead of `p.expanded()`.
-    const p = {} as Record<string, unknown>;
+    // `props.expanded` instead of `props.expanded()`.
+    const readable = {} as Record<string, unknown>;
     for (const key of presentationKeys) {
-      Object.defineProperty(p, key, {
+      Object.defineProperty(readable, key, {
         get: () => presentationValue(key),
         enumerable: true,
       });
     }
+    // Declared state is unwrapped: the recipe named it, so it is a value the
+    // class map consumes and the layout reads without parentheses.
     for (const key of stateKeys) {
-      Object.defineProperty(p, key, {
+      Object.defineProperty(readable, key, {
         get: () => {
           const accessor = model?.[key];
           return typeof accessor === "function" ? accessor() : accessor;
@@ -224,14 +226,29 @@ export function defineComponent<R extends Recipe>(
         enumerable: true,
       });
     }
-    Object.defineProperty(p, "style", {
+
+    // Everything else the setup returns passes through untouched.
+    //
+    // Unwrapping these too was a bug with a sharp edge: a model member that is
+    // itself a function, such as an event handler, would be *called* rather
+    // than returned, and `p.setTyped` came back as the result of invoking it
+    // with no arguments. Only a name the recipe declared as state can be
+    // assumed to be an accessor.
+    for (const key of Object.keys(model ?? {})) {
+      if (stateKeys.includes(key) || key === "context") continue;
+      Object.defineProperty(readable, key, {
+        get: () => model?.[key],
+        enumerable: true,
+      });
+    }
+    Object.defineProperty(readable, "style", {
       get: () => escape.style,
       enumerable: true,
     });
-    Object.defineProperty(p, "slotId", { value: idOf, enumerable: false });
+    Object.defineProperty(readable, "slotId", { value: idOf, enumerable: false });
 
     const rendered = layout
-      ? layout(stable, p as never)
+      ? layout(stable, readable as never)
       : createComponent(Dynamic, {
           component: element,
           get children() {

@@ -513,7 +513,7 @@ export const badge = recipe({
     #[test]
     fn the_compiled_table_is_spliced_into_the_declaration() {
         let out = compile(BADGE);
-        assert!(out.contains("__compiled:"), "{out}");
+        assert!(out.contains("_layouts:"), "{out}");
         // Everything else is byte-identical; only the insertion is new.
         assert!(out.contains(r#"component: "badge""#), "{out}");
         assert!(out.starts_with('\n'), "leading source must be untouched");
@@ -525,7 +525,7 @@ export const badge = recipe({
             r#"export const a = recipe({ component: "a", slots: { root: {} } });
                export const b = recipe({ component: "b", slots: { root: {} } });"#,
         );
-        assert_eq!(out.matches("__compiled:").count(), 2, "{out}");
+        assert_eq!(out.matches("_layouts:").count(), 2, "{out}");
         // The second splice must not have shifted the first.
         assert!(
             out.contains(r#"component: "a""#) && out.contains(r#"component: "b""#),

@@ -32,11 +32,11 @@ describe("compiled and interpreted resolution agree", () => {
     // Guards against the file being regenerated from a compiler that silently
     // stopped compiling, which would make every case below pass vacuously.
     // `config` is narrowed to the literal that was written, and the compiler
-    // adds `__compiled` afterwards, so the property is genuinely absent from
+    // adds `_layouts` afterwards, so the property is genuinely absent from
     // the inferred type. Reading it through the declared shape rather than
     // widening `RecipeConfig`, which would let anyone hand-write one.
-    const compiled = (parityCompiled.config as RecipeConfig).__compiled;
-    const interpreted = (parity.config as RecipeConfig).__compiled;
+    const compiled = (parityCompiled.config as RecipeConfig)._layouts;
+    const interpreted = (parity.config as RecipeConfig)._layouts;
     expect(compiled).toBeDefined();
     expect(interpreted).toBeUndefined();
   });

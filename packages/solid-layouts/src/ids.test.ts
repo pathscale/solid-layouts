@@ -11,7 +11,7 @@ afterEach(__resetInstances);
 describe("slot ids", () => {
   test("the compiler assigns an index per slot", () => {
     const compiled = (parityCompiled.config as RecipeConfig)
-      .__compiled as CompiledRecipe;
+      ._layouts as CompiledRecipe;
     const indices = Object.values(compiled.slotIds);
     expect(indices.length).toBe(3);
     expect(new Set(indices).size).toBe(3);
@@ -42,7 +42,7 @@ describe("slot ids through a component", () => {
   });
   // Hand-written to stand in for a compiled table, since this recipe is
   // declared in a test file the Rust compiler never sees.
-  (button.config as RecipeConfig).__compiled = {
+  (button.config as RecipeConfig)._layouts = {
     slots: { root: { base: "btn", axes: {} } },
     stateKeys: [],
     slotIds: { root: 4 },

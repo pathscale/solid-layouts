@@ -89,7 +89,7 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
     );
   }
 
-  const compiled = config.__compiled;
+  const compiled = config._layouts;
 
   /**
    * The compiled path: index the table rather than walk the configuration.

@@ -45,10 +45,11 @@ export type RecipeConfig = {
   /**
    * Written by the compiler, never by hand.
    *
-   * The `__` prefix is the convention on this boundary: such a name is
-   * written by the compiler, read by the runtime, and carries no stability
-   * guarantee between versions. Hand-writing one couples your code to an
-   * internal shape that will change without notice.
+   * `_layouts` names the owner rather than merely marking the field private,
+   * which matters because the compiler injects it into source it does not own.
+   * A generic `__compiled` would collide with the next tool that has the same
+   * idea. Everything under this key is written by the compiler, read by the
+   * runtime, and carries no stability guarantee between versions.
    *
    * The same information as `slots`, `props` and `state`, arranged so it can
    * be indexed instead of walked: slot, then variant axis, then value, to the
@@ -60,7 +61,7 @@ export type RecipeConfig = {
    * part of the declaration is not a literal. The runtime then walks the
    * configuration as before, so a computed recipe still works.
    */
-  __compiled?: CompiledRecipe;
+  _layouts?: CompiledRecipe;
 };
 
 export type CompiledSlot = {
@@ -98,22 +99,52 @@ type VariantValue<V extends Variant> = "true" extends keyof V
   ? boolean
   : "false" extends keyof V
     ? boolean
-    : keyof V;
+    : [keyof V] extends [never]
+      ? // An axis with no declared values carries data rather than classes: a
+        // status readout the layout prints but nothing styles. Resolving to
+        // `keyof {}` would give `never`, and intersecting `never` into the
+        // layout's props makes every field on it inaccessible.
+        unknown
+      : keyof V;
 
 export type VariantSelection<T extends Record<string, Variant> | undefined> =
   T extends Record<string, Variant>
     ? { [K in keyof T]?: VariantValue<T[K]> }
-    : Record<string, never>;
+    : // An absent axis group contributes nothing. `Record<string, never>`
+      // would be the tempting spelling and is actively wrong: intersected
+      // with the other group it types every property as `never`, so a recipe
+      // that declares state but no props ends up with no readable fields at
+      // all. An empty object adds no constraint, which is the intent.
+      // eslint-disable-next-line @typescript-eslint/ban-types
+      {};
+
+type ConfigOf<R> = R extends { config: infer C } ? C : never;
+
+/**
+ * The axis group under `key`, or nothing when the recipe does not declare it.
+ *
+ * The check is against a *required* property deliberately. Inferring through
+ * an optional one (`{ props?: infer P }`) matches a config that omits `props`
+ * entirely and infers `unknown`, which then fails the `Record<string, Variant>`
+ * test and lands in whatever the false branch is. Every spelling of that
+ * branch was wrong: `never` poisoned the intersection so no field on the
+ * layout's props was readable, and `Record<string, never>` typed every field
+ * as `never` for the same effect.
+ */
+type AxisGroup<R, Key extends string> = ConfigOf<R> extends Record<Key, infer G>
+  ? G extends Record<string, Variant>
+    ? VariantSelection<G>
+    : // biome-ignore lint/complexity/noBannedTypes: an absent group must add
+      // no constraint, which is what the empty object means here.
+      {}
+  : // biome-ignore lint/complexity/noBannedTypes: same.
+    {};
 
 /** The presentation props a recipe accepts at the call site. */
-export type PropsOf<R> = R extends { config: { props?: infer P } }
-  ? VariantSelection<P extends Record<string, Variant> ? P : undefined>
-  : never;
+export type PropsOf<R> = AxisGroup<R, "props">;
 
 /** The state keys a recipe expects its setup function to return. */
-export type StateOf<R> = R extends { config: { state?: infer S } }
-  ? VariantSelection<S extends Record<string, Variant> ? S : undefined>
-  : never;
+export type StateOf<R> = AxisGroup<R, "state">;
 
 /** The slot names a recipe declares. */
 export type SlotsOf<R> = R extends { config: { slots: infer S } }
