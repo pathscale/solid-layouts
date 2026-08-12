@@ -1,7 +1,7 @@
 {
   "name": "@pathscale/test-ui",
   "version": "0.0.0",
-  "description": "One-component Layout UI used to inspect the solid-layouts library compiler output",
+  "description": "Small Layout UI used to inspect the solid-layouts library compiler output",
   "license": "MIT",
   "type": "module",
   "sideEffects": [

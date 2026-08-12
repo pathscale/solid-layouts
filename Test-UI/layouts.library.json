@@ -9,6 +9,14 @@
       "recipeExport": "icon",
       "layout": "components/icon/Icon.layout.tsx",
       "layoutExport": "IconLayout"
+    },
+    {
+      "name": "Button",
+      "entry": "index.ts",
+      "recipe": "components/button/Button.recipe.ts",
+      "recipeExport": "button",
+      "layout": "components/button/Button.layout.tsx",
+      "layoutExport": "ButtonLayout"
     }
   ]
 }

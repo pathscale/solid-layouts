@@ -49,7 +49,7 @@ test("resolves an exact component index from C and accepts its public export", (
   expect(application.layoutSources).toEqual([
     {
       module: "@pathscale/test-ui",
-      exports: ["Icon"],
+      exports: ["Button", "Icon"],
       resolved: resolve(__dirname, "../../Test-UI/bundle/index.ts"),
     },
   ]);
@@ -63,16 +63,29 @@ test("resolves an exact component index from C and accepts its public export", (
   expect(result.code).toContain(application.layoutSources[0].resolved);
 });
 
+test("accepts another public component exported by C", () => {
+  const { root } = fixture();
+  const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
+  const result = compileApplicationFile(
+    'import { Button } from "@pathscale/test-ui"; export const View = () => <Button />;',
+    join(root, "src/View.tsx"),
+    application,
+  );
+  expect(result.failed).toBe(false);
+  expect(result.changed).toBe(true);
+  expect(result.code).toContain(application.layoutSources[0].resolved);
+});
+
 test("rejects a public export absent from C's manifest", () => {
   const { root } = fixture();
   const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
   expect(() =>
     compileApplicationFile(
-      'import { Button } from "@pathscale/test-ui"; export const View = () => <Button />;',
+      'import { Missing } from "@pathscale/test-ui"; export const View = () => <Missing />;',
       join(root, "src/View.tsx"),
       application,
     ),
-  ).toThrow("public export `Button`");
+  ).toThrow("public export `Missing`");
 });
 
 test("rejects a package with no Layout manifest discovery field", () => {

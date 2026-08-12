@@ -42,6 +42,10 @@ test("builds valid generated Layout source and a package manifest", () => {
     "utf8",
   );
   const entry = readFileSync(join(result.outputRoot, "index.ts"), "utf8");
+  const button = readFileSync(
+    join(result.outputRoot, "components/button/Button.generated.tsx"),
+    "utf8",
+  );
 
   expect(layout).toContain("({ slot, children }, p) =>");
   expect(layout).toContain("p.width");
@@ -49,8 +53,14 @@ test("builds valid generated Layout source and a package manifest", () => {
   expect(recipe).toContain("_layouts:");
   expect(entry).toContain('from "solid-layouts/application-boundary"');
   expect(entry).toContain("export const Icon = __defineLayoutComponent");
+  expect(entry).toContain("export const Button = __defineLayoutComponent");
+  expect(button).toContain("Boolean(p.isDisabled)");
+  expect(button).not.toContain("local.isDisabled");
   expect(result.manifest.components.Icon.layout).toBe(
     "./components/icon/Icon.generated.tsx",
+  );
+  expect(result.manifest.components.Button.layout).toBe(
+    "./components/button/Button.generated.tsx",
   );
 });
 
