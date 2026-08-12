@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 pub enum FileKind {
     /// `*.layout.tsx`. Bare identifiers resolve against the layout's model.
     Layout,
-    /// Anything else. Parsed for `configureUI` calls and otherwise left alone.
+    /// Anything else. Parsed for component references and otherwise left alone.
     #[default]
     Other,
 }
@@ -35,10 +35,33 @@ impl FileKind {
     }
 }
 
+/// Where Layouts are read from.
+///
+/// Configuration with a default, never hardcoded. The audience is people
+/// building their own component libraries, and a compiler that understands one
+/// library is useless to them. Entries are resolved through the import graph:
+/// `import { Button } from "@pathscale/ui"` looks Button up in that package's
+/// set, `from "./ui"` looks in the local one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutsConfig {
+    pub layouts: Vec<String>,
+}
+
+impl Default for LayoutsConfig {
+    fn default() -> Self {
+        Self {
+            layouts: vec!["@pathscale/ui".to_owned()],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransformOptions {
     pub filename: String,
+    #[serde(default)]
+    pub config: LayoutsConfig,
     /// Off by default. With it set the pass parses and returns the source
     /// unchanged, which is how a host proves the pipeline is wired before any
     /// rewriting is trusted.
@@ -50,6 +73,7 @@ impl TransformOptions {
     pub fn new(filename: impl Into<String>) -> Self {
         Self {
             filename: filename.into(),
+            config: LayoutsConfig::default(),
             parse_only: false,
         }
     }
@@ -66,11 +90,56 @@ pub enum Severity {
     Warning,
 }
 
-/// A problem found in the source, carrying enough to point at it.
+/// A 1-based position in the source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Position {
+    pub line: u32,
+    pub column: u32,
+}
+
+/// Converts byte offsets into line and column.
 ///
-/// Byte offsets rather than line and column: the host renders them, and doing
-/// the conversion here would mean carrying the source text around to produce a
-/// message nobody may ever display.
+/// Built once per file and reused. Doing it per diagnostic would rescan the
+/// source for each one, which is quadratic on a file that produces many.
+pub struct LineIndex {
+    /// Byte offset of the first character of each line.
+    starts: Vec<u32>,
+}
+
+impl LineIndex {
+    pub fn new(source: &str) -> Self {
+        let mut starts = vec![0u32];
+        for (offset, byte) in source.bytes().enumerate() {
+            if byte == b'\n' {
+                starts.push(offset as u32 + 1);
+            }
+        }
+        Self { starts }
+    }
+
+    /// Column counts UTF-8 *characters*, not bytes, so a line containing an
+    /// emoji or an accent does not report a column past where the caret
+    /// visibly sits.
+    pub fn position(&self, source: &str, offset: u32) -> Position {
+        let line = match self.starts.binary_search(&offset) {
+            Ok(index) => index,
+            Err(index) => index - 1,
+        };
+        let start = self.starts[line] as usize;
+        let end = (offset as usize).min(source.len());
+        let column = source
+            .get(start..end)
+            .map(|text| text.chars().count())
+            .unwrap_or(0);
+
+        Position {
+            line: line as u32 + 1,
+            column: column as u32 + 1,
+        }
+    }
+}
+
+/// A problem found in the source, carrying enough to point at it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
@@ -98,6 +167,19 @@ impl Diagnostic {
             end: span.end,
         }
     }
+
+    /// `path/to/file.tsx:12:5: message`, the form an editor can jump from.
+    pub fn render(&self, filename: &str, source: &str, index: &LineIndex) -> String {
+        let at = index.position(source, self.start);
+        let label = match self.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        format!(
+            "{filename}:{}:{}: {label}: {}",
+            at.line, at.column, self.message
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +191,14 @@ pub struct TransformResult {
     /// file, and a test can assert that an unrelated file was left alone
     /// rather than round-tripped through the code generator.
     pub changed: bool,
+}
+
+impl TransformResult {
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
+    }
 }
 
 #[cfg(test)]
@@ -142,5 +232,47 @@ mod tests {
                 "{name} must not be treated as a layout"
             );
         }
+    }
+
+    #[test]
+    fn layouts_default_to_the_reference_library_but_are_not_hardcoded() {
+        assert_eq!(LayoutsConfig::default().layouts, vec!["@pathscale/ui"]);
+
+        let mine = LayoutsConfig {
+            layouts: vec!["my-design-system".to_owned(), "./src/ui".to_owned()],
+        };
+        assert_eq!(mine.layouts.len(), 2);
+    }
+
+    #[test]
+    fn positions_are_one_based() {
+        let source = "first\nsecond\nthird";
+        let index = LineIndex::new(source);
+
+        assert_eq!(index.position(source, 0), Position { line: 1, column: 1 });
+        // 'second' starts at byte 6
+        assert_eq!(index.position(source, 6), Position { line: 2, column: 1 });
+        assert_eq!(index.position(source, 8), Position { line: 2, column: 3 });
+    }
+
+    #[test]
+    fn a_column_counts_characters_rather_than_bytes() {
+        // Four bytes, one character. A byte count would report column 5.
+        let source = "let x = \"🦀\";";
+        let index = LineIndex::new(source);
+        let offset = source.find(';').unwrap() as u32;
+        assert_eq!(index.position(source, offset).column, 12);
+    }
+
+    #[test]
+    fn a_rendered_diagnostic_is_jumpable() {
+        let source = "one\ntwo\nthree";
+        let index = LineIndex::new(source);
+        let d = Diagnostic::error("no Layout named `Button`", Span::new(4, 7));
+
+        assert_eq!(
+            d.render("src/App.tsx", source, &index),
+            "src/App.tsx:2:1: error: no Layout named `Button`"
+        );
     }
 }
