@@ -1,5 +1,7 @@
 # Porting a Vue app to Solid, with Layouts
 
+This guide covers component design and migration decisions. For compiler setup and the required A+B→C, C+D+E→F build pipeline, read [Getting started](./getting-started.md) first.
+
 For someone with a working Vue application deciding whether the port is
 affordable. It is written around the two things that make it cheaper than it
 looks: your component files keep their shape, and most of your components
@@ -170,6 +172,8 @@ callback, which is more typing and less magic.
 4. Set `configureUI` once, at the end, when you can see which defaults you have
    been repeating at call sites.
 
-Leave the build pass until last. The runtime works with no tooling at all, so
-nothing in this document requires it; the pass only makes the result smaller
-and faster.
+Wire the compiler with the first component, before moving application imports.
+Authored `.layout.tsx` is template syntax and cannot be published or consumed
+without the library pass; the generated package also requires the application
+pass. Keeping that boundary working one component at a time prevents a large
+port from accumulating hand-written generated code that later has to be removed.

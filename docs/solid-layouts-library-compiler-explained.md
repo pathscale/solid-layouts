@@ -1,5 +1,7 @@
 # Solid Layouts library compiler
 
+For the full repository layout, commands, authored files, application configuration, and failure examples, start with [Getting started](./getting-started.md).
+
 ## The pipeline implemented here
 
 This work implements the first half of the two-stage Layouts pipeline:
@@ -27,7 +29,7 @@ This document focuses on B and the concrete C it produces. The initial E impleme
 
 ## A: the authored Test-UI
 
-`Test-UI/src` contains one component copied from the larger UI migration: Icon.
+`Test-UI/src` contains two components copied from the larger UI migration: Icon and Button. The full authored source is [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221); it is A and must be compiled before an application can consume it. `Test-UI` keeps the proof small enough that all of C can be reviewed directly while exercising multiple public exports, slots, variants, HTML passthrough, and event handlers.
 
 The important source is `Test-UI/src/components/icon/Icon.layout.tsx`. It intentionally has this shape:
 
@@ -103,6 +105,10 @@ bundle/
     Icon.css
     Icon.generated.tsx
     Icon.recipe.ts
+  components/button/
+    Button.css
+    Button.generated.tsx
+    Button.recipe.ts
 ```
 
 `Icon.generated.tsx` is valid TSX:
@@ -160,13 +166,13 @@ That regenerates `bundle` and packs it into `artifacts`.
 
 ## Verification performed
 
-- 52 Rust/OXC tests pass, including the conformance corpus, explicit mode behavior, and exact application import matching.
-- 3 library compiler tests pass: successful Icon output, generated boundary/entry validation, missing-recipe failure, and undeclared-slot failure.
-- 7 application compiler tests pass, including absent exports, mismatched generated call sites, and corrupt, unsupported, or incomplete package metadata.
+- 54 Rust/OXC tests pass, including the conformance corpus, explicit mode behavior, exact application import matching, and application import rewriting.
+- 3 library compiler tests pass: successful Icon and Button output, generated boundary/entry validation, missing-recipe failure, and undeclared-slot failure.
+- 9 application compiler tests pass, including multiple C exports, absent exports, missing runtime metadata, mismatched generated call sites, and corrupt, unsupported, or incomplete package metadata.
 - 143 `solid-layouts` runtime tests pass.
 - The runtime TypeScript typecheck passes.
 - The generated Test-UI package was packed successfully and its tarball contents were inspected.
-- Chuzz builds successfully with Icon imported from C and transformed through E.
+- Chuzz imports Icon and Button from C and sends both through E; Button replaces the real title-bar and inspector controls rather than only changing an import.
 - Chuzz fails when an absent C export is imported and when E is removed.
 
 ## Application-stage boundary

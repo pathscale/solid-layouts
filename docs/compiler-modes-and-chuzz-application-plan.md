@@ -1,8 +1,10 @@
 # Compiler modes and the Chuzz application integration
 
+For a command-by-command producer and consumer setup, start with [Getting started](./getting-started.md). This document defines the mode boundary and explains why the integration is shaped this way.
+
 ## Status
 
-Both compiler passes now exist for the first one-component proof. The library compiler produces the local Test-UI bundle from the authored Icon Layout, and the application compiler consumes that bundle from Chuzz before the normal Solid transform. This is the working slice, not a claim that the complete UI library has been ported.
+Both compiler passes now exist for the two-component proof. The library compiler produces the local Test-UI bundle from the authored Icon and Button Layouts, and the application compiler consumes that bundle from Chuzz before the normal Solid transform. This is the working slice, not a claim that the complete UI library has been ported.
 
 ```text
 A = user-authored Layout UI source
@@ -134,9 +136,12 @@ For each configured Layout package, E must:
 5. Require a supported manifest format.
 6. Validate that the manifest package identity agrees with the resolved package.
 7. Validate every entry, recipe, generated Layout, and named export referenced by the manifest.
-8. Build an exact `(module specifier, public export) -> Layout record` index once per build.
-9. Parse application modules before Solid lowers JSX.
-10. Match each Layout component reference against that exact index.
+8. Require C to declare the shared `solid-layouts` runtime as a peer dependency.
+9. Resolve C's public JavaScript entry.
+10. Build an exact `(module specifier, public export) -> Layout record` index once per build.
+11. Parse application modules before Solid lowers JSX.
+12. Match each Layout component reference against that exact index.
+13. Rewrite the configured package import to the validated public C entry.
 
 The manifest lookup is exact. Merely listing a package name in configuration is not proof that one of its exports has a Layout.
 
@@ -208,7 +213,7 @@ The application host builds the exact export index from C once at plugin setup. 
 
 Chuzz is a real Rsbuild/Solid application. It already consumes `@pathscale/ui`, renders Icon in multiple locations, disables code splitting, and is intended to expose both bundle cost and per-instance cost under Boa.
 
-The first integration deliberately changes only Icon because the current C fixture contains only Icon. Existing `@pathscale/ui` remains in place for Flex, Chip, motion, CSS, and color types.
+The integration changes Icon and Button because the current C fixture contains both. Existing `@pathscale/ui` remains in place for Flex, Chip, motion, CSS, and color types.
 
 Conceptually, application source changes from:
 
@@ -220,7 +225,7 @@ to:
 
 ```ts
 import { Flex } from "@pathscale/ui";
-import { Icon } from "@pathscale/test-ui";
+import { Button, Icon } from "@pathscale/test-ui";
 ```
 
 This is not hand-generated component code. Chuzz imports the compiler-produced C package. The authored Layout, generated Layout TSX, compiled recipe table, and manifest remain owned by the producer/compiler pipeline.
@@ -262,7 +267,7 @@ The published path remains `layouts: ["@pathscale/test-ui"]`; package resolution
 The positive path is:
 
 ```text
-Test-UI authored Icon
+Test-UI authored Icon and Button
        |
        v
 solid-layouts library compiler B
@@ -270,13 +275,14 @@ solid-layouts library compiler B
        v
 local npm-ready package C
        |
-       +---------- Chuzz imports Icon
+       +---------- Chuzz imports Icon and Button
                           |
                           v
               application compiler E
               resolves package metadata
               reads manifest
-              matches exact Icon export
+              matches exact public exports
+              rewrites the package import to C
               validates generated Layout and recipe
                           |
                           v
@@ -288,12 +294,13 @@ local npm-ready package C
 
 The implemented test matrix is:
 
-1. Valid local C package plus Chuzz Icon imports succeeds.
+1. Valid local C package accepts and rewrites both Icon and Button imports.
 2. Importing an export absent from the manifest fails.
 3. A configured package without the `solidLayouts` discovery field fails.
 4. A corrupt or unsupported manifest fails.
 5. A component record pointing at a missing generated Layout fails.
-6. Removing the application compiler from the actual Chuzz build fails because the compiler boundary remains unresolved.
+6. A generated entry that disagrees with its manifest record fails.
+7. Removing the application compiler from the actual Chuzz build fails because the compiler boundary remains unresolved.
 
 Small isolated fixtures are still appropriate for these negative cases. They test compiler diagnostics; they are not a replacement toy application.
 
@@ -309,11 +316,19 @@ The completed slice is:
 6. Passed that index to the native application matcher and preserved import aliases and namespace origins.
 7. Added the unresolved compiler boundary to generated C entries.
 8. Added positive and hard-failure compiler tests.
-9. Pointed Chuzz directly at the local compiler-produced C directory and local runtime, without installing packages.
-10. Redirected only Icon imports in Chuzz to C.
-11. Built Chuzz successfully through E and confirmed that an absent export and removal of E both stop the build.
+9. Made E resolve C's public entry and rewrite validated application imports instead of relying on a hand-written bundler alias.
+10. Pointed Chuzz at the local compiler-produced C directory and local runtime, without installing packages.
+11. Redirected Icon and Button imports in Chuzz to C and replaced the raw title-bar and inspector buttons with the compiled component.
 
-The next work is to review the generated C artifact, settle the published package names/API types, publish or install a packed C through the normal dependency graph, expand beyond Icon one component at a time, and then measure bundle delta and per-instance runtime cost.
+The next work is manual Chuzz behavior review, settling the published package names/API types, publishing or installing a packed C through the normal dependency graph, expanding one component per commit, and measuring bundle delta and per-instance runtime cost in the target Boa environment.
+
+## Runtime cost
+
+B and E parse and transform source only during builds. They add no parser, AST, manifest walk, or template compiler to F.
+
+The shared runtime is required by C and is bundled once by the application. For each mounted component, `defineComponent` splits incoming props by destination, allocates the stable slot interface, creates memos for the recipe selection and resolved slot attributes, and invokes the generated Layout. A compiled recipe indexes precomputed slot/axis tables; it does not rebuild the recipe declaration. Solid invalidates those memos when their reactive inputs change rather than rerunning them for unrelated DOM updates.
+
+The expected risk is therefore initial mount and large-list creation, not steady-state browser rendering. The exact bundle-byte delta and mount/update time must be measured in Chuzz's production build and Boa target before a performance claim is accepted. Source inspection is enough to identify the work but not enough to turn it into a percentage.
 
 ## Responsibility boundaries
 
