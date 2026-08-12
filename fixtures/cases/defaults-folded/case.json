@@ -1,0 +1,5 @@
+{
+  "filename": "App.tsx",
+  "pending": true,
+  "reason": "Phase 1. Requires reading configureUI across the module graph, so the generator supplies the resolved table rather than the pass discovering it."
+}

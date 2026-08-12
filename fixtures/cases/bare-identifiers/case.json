@@ -1,0 +1,5 @@
+{
+  "filename": "Accordion.layout.tsx",
+  "pending": true,
+  "reason": "Phase 3. Cosmetic: closes the last visible gap with a Vue <template> block. Must not change behaviour, only the source the author writes."
+}
