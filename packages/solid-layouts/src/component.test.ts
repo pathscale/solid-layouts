@@ -469,3 +469,27 @@ describe("defineComponent: layouts and plain HTML", () => {
     dispose();
   });
 });
+
+describe("defineComponent: compound slots", () => {
+  test("a sub-component renders the slot it names", () => {
+    // Badge, Badge.Anchor and Badge.Label share one recipe but are three
+    // components. Without naming the slot, all three rendered the root's
+    // class and the caller's HTML landed on the wrong element.
+    let root: SlotAttrs | undefined;
+    const Icon = defineComponent({
+      recipe: button,
+      slot: "icon",
+      layout: ((stable: { slot: Record<string, SlotAttrs> }) => {
+        root = stable.slot.icon;
+        return null;
+      }) as never,
+    });
+
+    const dispose = mount(Icon, { id: "star" });
+    const attrs = root as unknown as Record<string, unknown>;
+    expect(String(attrs.class)).toContain("btn__icon");
+    // The HTML follows the named slot rather than staying on `root`.
+    expect(attrs.id).toBe("star");
+    dispose();
+  });
+});

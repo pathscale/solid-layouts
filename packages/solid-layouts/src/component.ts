@@ -69,6 +69,16 @@ export type DefineComponentConfig<R extends Recipe> = {
   name?: string;
   /** Rendered when there is no `layout`. Falls back to the recipe's. */
   element?: string;
+  /**
+   * Which slot this component *is*, when it is part of a compound.
+   *
+   * `Badge`, `Badge.Anchor` and `Badge.Label` share one recipe but are three
+   * components, each rendering a different slot. Naming the slot here is what
+   * puts the caller's plain HTML on the right element and gives the component
+   * the right class; it defaults to `root`, which is what a component that is
+   * the whole of its recipe wants.
+   */
+  slot?: SlotsOf<R> & string;
   /** Library defaults, the lowest layer of the cascade. */
   defaults?: ComponentDefaults;
   /**
@@ -106,6 +116,8 @@ export function defineComponent<R extends Recipe>(
   const presentationKeys = Object.keys(recipe.config.props ?? {});
   const stateKeys = Object.keys(recipe.config.state ?? {});
   const slotNames = Object.keys(recipe.config.slots);
+  /** The slot this component renders as itself. See `slot` on the config. */
+  const rootSlot = (config.slot ?? "root") as string;
 
   const compiled = recipe.config._layouts;
 
@@ -122,7 +134,7 @@ export function defineComponent<R extends Recipe>(
     const idOf = (slot: string) => {
       const given = (props as Record<string, unknown>).id;
       if (typeof given === "string") {
-        return slot === "root" ? given : `${given}-${slot}`;
+        return slot === rootSlot ? given : `${given}-${slot}`;
       }
       return __slotId(compiled?.slotIds, slot, instance);
     };
@@ -197,7 +209,7 @@ export function defineComponent<R extends Recipe>(
         // Recipe attributes go on top, so a caller still cannot overwrite the
         // class or the `data-slot` that identifies the component.
         get: () =>
-          name === "root"
+          name === rootSlot
             ? ({
                 ...asAttributes(passthrough as Record<string, unknown>),
                 ...(resolved()[name] as SlotAttrs),
@@ -271,7 +283,7 @@ export function defineComponent<R extends Recipe>(
           // `id` or `aria-label`, but must not be able to overwrite the class
           // or the `data-slot` that identifies the component.
           ...asAttributes(passthrough as Record<string, unknown>),
-          ...spreadable(() => resolved().root),
+          ...spreadable(() => resolved()[rootSlot] as SlotAttrs),
         });
 
     if (!provide) return rendered;
