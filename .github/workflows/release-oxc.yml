@@ -1,0 +1,113 @@
+name: Release solid-layouts-oxc
+
+# A native package cannot be published from one machine: the tarball has to
+# carry a binary per platform, and a macOS laptop can build exactly one of
+# them. Publishing from here rather than locally is what stops a version being
+# burned on an artifact that fails on first install under Linux.
+on:
+  push:
+    tags:
+      - "solid-layouts-oxc-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux runs on Ubicloud; macOS has to be GitHub-hosted because
+          # Ubicloud has no macOS runners.
+          - target: x86_64-unknown-linux-gnu
+            runner: ubicloud-standard-4
+          - target: aarch64-unknown-linux-gnu
+            runner: ubicloud-standard-4-arm
+          - target: x86_64-apple-darwin
+            runner: macos-14
+          - target: aarch64-apple-darwin
+            runner: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Build
+        working-directory: packages/solid-layouts-oxc
+        run: |
+          cargo build --release --features napi --target ${{ matrix.target }}
+
+      - name: Name the binary as the loader expects
+        working-directory: packages/solid-layouts-oxc
+        shell: bash
+        run: |
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)  name=linux-x64-gnu;   lib=libsolid_layouts_oxc.so ;;
+            aarch64-unknown-linux-gnu) name=linux-arm64-gnu; lib=libsolid_layouts_oxc.so ;;
+            x86_64-apple-darwin)       name=darwin-x64;      lib=libsolid_layouts_oxc.dylib ;;
+            aarch64-apple-darwin)      name=darwin-arm64;    lib=libsolid_layouts_oxc.dylib ;;
+          esac
+          cp "target/${{ matrix.target }}/release/$lib" "solid-layouts-oxc.$name.node"
+
+      - name: Prove it loads and transforms
+        working-directory: packages/solid-layouts-oxc
+        # Cross-built artifacts cannot run on the builder, so this only checks
+        # the ones native to the runner. A binary that never loads is worse
+        # than one that never built.
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: |
+          bun -e '
+            const { transform } = require("./index.js");
+            const out = transform(
+              `import { recipe } from "solid-layouts";
+               export const r = recipe({ component: "r", element: "div", slots: { root: { base: "r" } } });`,
+              "/x/R.recipe.ts",
+            );
+            if (!out.code.includes("_layouts")) throw new Error("the pass did not emit");
+            console.log("ok");
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binding-${{ matrix.target }}
+          path: packages/solid-layouts-oxc/*.node
+
+  publish:
+    needs: build
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages/solid-layouts-oxc
+          merge-multiple: true
+
+      - name: Refuse to publish a partial set
+        working-directory: packages/solid-layouts-oxc
+        run: |
+          count=$(ls *.node | wc -l)
+          if [ "$count" -ne 4 ]; then
+            echo "expected four bindings, found $count:"; ls *.node
+            exit 1
+          fi
+
+      - name: Publish
+        working-directory: packages/solid-layouts-oxc
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
