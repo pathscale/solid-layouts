@@ -1,0 +1,21 @@
+{
+  "name": "solid-layouts",
+  "version": "0.0.0",
+  "description": "Logic in a .ts file, markup in a .layout.tsx file, presentation declared at the call site",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./recipe": "./src/recipe.ts",
+    "./cx": "./src/cx.ts"
+  },
+  "files": ["src", "dist"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "solid-js": "^1.9.0"
+  }
+}
