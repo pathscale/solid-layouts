@@ -1,0 +1,14 @@
+{
+  "format": "solid-layouts-library-v1",
+  "package": "@pathscale/test-ui",
+  "version": "0.0.0",
+  "components": {
+    "Icon": {
+      "entry": "./index.ts",
+      "recipe": "./components/icon/Icon.recipe.ts",
+      "recipeExport": "icon",
+      "layout": "./components/icon/Icon.generated.tsx",
+      "layoutExport": "IconLayout"
+    }
+  }
+}

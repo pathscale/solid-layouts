@@ -1,0 +1,5 @@
+{
+  "filename": "index.ts",
+  "pending": true,
+  "reason": "Phase 2. Inlines the defineComponent indirection, which is where the +33% wiring overhead measured on the v1 Accordion goes."
+}
