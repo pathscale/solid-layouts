@@ -4,7 +4,9 @@
 //! `layouts-transform` and has no idea a JS runtime exists, which is what lets
 //! `cargo test` run the whole pass with no Node, no Bun and no bundler.
 
-pub use layouts_common::{Diagnostic, FileKind, Severity, TransformOptions, TransformResult};
+pub use layouts_common::{
+    CompilerMode, Diagnostic, FileKind, LayoutSource, Severity, TransformOptions, TransformResult,
+};
 pub use layouts_transform::{FoundLayout, find_layouts, print, transform};
 
 #[cfg(feature = "napi")]
@@ -41,16 +43,19 @@ mod binding {
 
     /// What a host can configure.
     ///
-    /// `layouts` names the modules a component may be imported from. It
-    /// defaults to `["@pathscale/ui"]`, which is right for an app installing
-    /// the library and wrong for a repository that vendors it: a relative or
-    /// aliased import is treated as the user's own code and allowed through
-    /// unchecked, so a bundled UI silently gets no checking at all. Such a
-    /// repository sets this to the path it keeps the library under.
+    /// Mode is mandatory. Application hosts additionally provide the exact
+    /// package/export index they resolved from Layout manifests.
     #[napi(object)]
     pub struct JsOptions {
-        pub layouts: Option<Vec<String>>,
+        pub mode: String,
+        pub layout_sources: Option<Vec<JsLayoutSource>>,
         pub parse_only: Option<bool>,
+    }
+
+    #[napi(object)]
+    pub struct JsLayoutSource {
+        pub module: String,
+        pub exports: Vec<String>,
     }
 
     #[napi]
@@ -59,15 +64,23 @@ mod binding {
         filename: String,
         options: Option<JsOptions>,
     ) -> JsTransformResult {
-        let mut options_inner = layouts_common::TransformOptions::new(filename);
-        if let Some(given) = options {
-            if let Some(layouts) = given.layouts {
-                options_inner.config.layouts = layouts;
-            }
-            if let Some(parse_only) = given.parse_only {
-                options_inner.parse_only = parse_only;
-            }
+        let given = options.expect("solid-layouts-oxc requires an explicit compiler mode");
+        let mode = match given.mode.as_str() {
+            "library" => layouts_common::CompilerMode::Library,
+            "application" => layouts_common::CompilerMode::Application,
+            other => panic!("unknown solid-layouts compiler mode: {other}"),
+        };
+        let mut options_inner = layouts_common::TransformOptions::new(filename, mode);
+        if let Some(layout_sources) = given.layout_sources {
+            options_inner.config.sources = layout_sources
+                .into_iter()
+                .map(|source| layouts_common::LayoutSource {
+                    module: source.module,
+                    exports: source.exports,
+                })
+                .collect();
         }
+        options_inner.parse_only = given.parse_only.unwrap_or(false);
         let options = options_inner;
         let result = layouts_transform::transform(&source, &options);
         let lines = layouts_common::LineIndex::new(&source);

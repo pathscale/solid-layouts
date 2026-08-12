@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use layouts_common::TransformOptions;
+use layouts_common::{CompilerMode, TransformOptions};
 use layouts_transform::transform;
 
 struct Case {
@@ -83,7 +83,10 @@ fn every_case_behaves_as_its_metadata_claims() {
     let mut failures = Vec::new();
 
     for case in load_cases() {
-        let result = transform(&case.input, &TransformOptions::new(&case.filename));
+        let result = transform(
+            &case.input,
+            &TransformOptions::new(&case.filename, CompilerMode::Library),
+        );
         let matches = result.code == case.expected;
 
         match (case.pending, matches) {

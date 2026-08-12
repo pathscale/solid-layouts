@@ -13,11 +13,24 @@
     },
     "./loader": {
       "default": "./loader.js"
+    },
+    "./library": {
+      "default": "./library.js"
+    },
+    "./application": {
+      "default": "./application.js"
     }
+  },
+  "bin": {
+    "solid-layouts-library": "bin/solid-layouts-library.js",
+    "solid-layouts-application": "bin/solid-layouts-application.js"
   },
   "files": [
     "index.js",
     "loader.js",
+    "library.js",
+    "application.js",
+    "bin",
     "*.node",
     "src",
     "crates",
@@ -38,6 +51,8 @@
   "scripts": {
     "build": "napi build --platform --release --features napi",
     "build:debug": "napi build --platform --features napi",
+    "test:library": "bun test library.test.js",
+    "test:application": "bun test application.test.js",
     "prepare": "sh scripts/build-binding.sh"
   },
   "devDependencies": {

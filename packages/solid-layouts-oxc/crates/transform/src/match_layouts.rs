@@ -8,8 +8,11 @@
 
 use std::collections::HashMap;
 
-use layouts_common::{Diagnostic, LayoutsConfig};
-use oxc_ast::ast::{Declaration, JSXElementName, JSXMemberExpressionObject, Program, Statement};
+use layouts_common::{Diagnostic, LayoutSource, LayoutsConfig};
+use oxc_ast::ast::{
+    Declaration, ImportDeclarationSpecifier, JSXElementName, JSXMemberExpression,
+    JSXMemberExpressionObject, Program, Statement,
+};
 use oxc_ast_visit::Visit;
 use oxc_span::{GetSpan, Span};
 
@@ -19,14 +22,19 @@ pub struct Reference {
     /// The binding as written. For `<Accordion.Item>` this is `Accordion`,
     /// because that is the name an import can bind.
     pub name: String,
+    /// Member names after the bound import. For `<UI.Icon>` this is `Icon`;
+    /// for `<Accordion.Item>` this is `Item`.
+    pub members: Vec<String>,
     pub span: Span,
 }
 
 /// Where a name came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
-    /// Imported from a module specifier.
-    Import(String),
+    /// A named or default import from a module specifier.
+    Import { source: String, imported: String },
+    /// A namespace import. The first JSX member is the public export.
+    NamespaceImport(String),
     /// Declared in this file. Not a Layout, and not an error either: a local
     /// helper component is ordinary code.
     Local,
@@ -45,29 +53,36 @@ struct ReferenceCollector {
     seen: Vec<String>,
 }
 
+fn member_parts(member: &JSXMemberExpression<'_>) -> (String, Vec<String>, Span) {
+    let mut members = vec![member.property.name.to_string()];
+    let mut object = &member.object;
+    loop {
+        match object {
+            JSXMemberExpressionObject::MemberExpression(inner) => {
+                members.push(inner.property.name.to_string());
+                object = &inner.object;
+            }
+            JSXMemberExpressionObject::IdentifierReference(identifier) => {
+                members.reverse();
+                return (identifier.name.to_string(), members, identifier.span);
+            }
+            JSXMemberExpressionObject::ThisExpression(_) => {
+                return ("this".to_owned(), Vec::new(), member.span);
+            }
+        }
+    }
+}
+
 impl<'a> Visit<'a> for ReferenceCollector {
     fn visit_jsx_element_name(&mut self, name: &JSXElementName<'a>) {
-        let (binding, span) = match name {
+        let (binding, members, span) = match name {
             JSXElementName::IdentifierReference(identifier) => {
-                (identifier.name.to_string(), identifier.span)
+                (identifier.name.to_string(), Vec::new(), identifier.span)
             }
             // `<Accordion.Item>`: the import binds `Accordion`, so that is what
             // has to resolve. Whether `Item` exists on it is the Layout's
             // business, not the resolver's.
-            JSXElementName::MemberExpression(member) => {
-                let mut object = &member.object;
-                loop {
-                    match object {
-                        JSXMemberExpressionObject::MemberExpression(inner) => {
-                            object = &inner.object;
-                        }
-                        JSXMemberExpressionObject::IdentifierReference(identifier) => {
-                            break (identifier.name.to_string(), identifier.span);
-                        }
-                        JSXMemberExpressionObject::ThisExpression(_) => return,
-                    }
-                }
-            }
+            JSXElementName::MemberExpression(member) => member_parts(member),
             _ => return,
         };
 
@@ -83,6 +98,7 @@ impl<'a> Visit<'a> for ReferenceCollector {
         self.seen.push(binding.clone());
         self.found.push(Reference {
             name: binding,
+            members,
             span,
         });
     }
@@ -115,7 +131,20 @@ pub fn find_origins(program: &Program<'_>) -> HashMap<String, Origin> {
                 };
                 for specifier in specifiers {
                     let local = specifier.local().name.to_string();
-                    origins.insert(local, Origin::Import(source.clone()));
+                    let origin = match specifier {
+                        ImportDeclarationSpecifier::ImportSpecifier(specifier) => Origin::Import {
+                            source: source.clone(),
+                            imported: specifier.imported.name().to_string(),
+                        },
+                        ImportDeclarationSpecifier::ImportDefaultSpecifier(_) => Origin::Import {
+                            source: source.clone(),
+                            imported: "default".to_owned(),
+                        },
+                        ImportDeclarationSpecifier::ImportNamespaceSpecifier(_) => {
+                            Origin::NamespaceImport(source.clone())
+                        }
+                    };
+                    origins.insert(local, origin);
                 }
             }
             Statement::ExportDeclaration(export) => {
@@ -170,14 +199,6 @@ fn declared_name(declaration: &Declaration<'_>, origins: &mut HashMap<String, Or
 ///
 /// `@` is ambiguous and has to be handled by shape: `@pathscale/ui` is a
 /// scoped package, `@/components` is an alias with an empty scope.
-fn is_project_local(specifier: &str) -> bool {
-    if specifier.starts_with('.') || specifier.starts_with('/') || specifier.starts_with('~') {
-        return true;
-    }
-    // `@/...` is an alias; `@scope/name` is a package.
-    specifier.starts_with("@/")
-}
-
 /// Solid's control-flow components.
 ///
 /// They are components by every syntactic test and have no Layout, because
@@ -221,21 +242,42 @@ pub fn check(program: &Program<'_>, config: &LayoutsConfig) -> Vec<Diagnostic> {
     for reference in find_references(program) {
         match origins.get(&reference.name) {
             Some(Origin::Local) => {}
-            Some(Origin::Import(source)) => {
-                // Project code is compiled from its own source, not matched
-                // against a Layout.
-                if is_project_local(source) || is_solid_builtin(&reference.name, source) {
+            Some(Origin::Import { source, imported }) => {
+                if is_solid_builtin(&reference.name, source) {
                     continue;
                 }
-                if !config.layouts.iter().any(|entry| entry == source) {
+                let Some(layout_source) = source_config(config, source) else {
+                    continue;
+                };
+                if !layout_source.exports.contains(imported) {
                     diagnostics.push(Diagnostic::error(
                         format!(
-                            "`{}` is imported from \"{}\", which is not a configured Layout \
-                             source. Add it to `layouts` in the config, or import the \
-                             component from one of: {}",
-                            reference.name,
-                            source,
-                            config.layouts.join(", ")
+                            "no Layout found for public export `{}` imported from \"{}\" as `{}`",
+                            imported, source, reference.name,
+                        ),
+                        reference.span,
+                    ));
+                }
+            }
+            Some(Origin::NamespaceImport(source)) => {
+                let Some(layout_source) = source_config(config, source) else {
+                    continue;
+                };
+                let Some(export) = reference.members.first() else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "namespace import `{}` from \"{}\" must name a Layout export",
+                            reference.name, source
+                        ),
+                        reference.span,
+                    ));
+                    continue;
+                };
+                if !layout_source.exports.contains(export) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "no Layout found for public export `{}` referenced through namespace `{}` from \"{}\"",
+                            export, reference.name, source
                         ),
                         reference.span,
                     ));
@@ -257,6 +299,10 @@ pub fn check(program: &Program<'_>, config: &LayoutsConfig) -> Vec<Diagnostic> {
     diagnostics
 }
 
+fn source_config<'a>(config: &'a LayoutsConfig, source: &str) -> Option<&'a LayoutSource> {
+    config.sources.iter().find(|entry| entry.module == source)
+}
+
 /// Unused today, kept because `GetSpan` is the trait the AST exposes spans
 /// through and dropping the import would break the next thing that needs one.
 #[allow(dead_code)]
@@ -271,7 +317,7 @@ pub(crate) mod tests {
     use oxc_parser::Parser;
     use oxc_span::SourceType;
 
-    pub(crate) fn check_source(source: &str, layouts: &[&str]) -> Vec<String> {
+    pub(crate) fn check_source(source: &str, layouts: &[(&str, &[&str])]) -> Vec<String> {
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
         assert!(
@@ -280,7 +326,13 @@ pub(crate) mod tests {
             parsed.diagnostics
         );
         let config = LayoutsConfig {
-            layouts: layouts.iter().map(|s| (*s).to_owned()).collect(),
+            sources: layouts
+                .iter()
+                .map(|(module, exports)| LayoutSource {
+                    module: (*module).to_owned(),
+                    exports: exports.iter().map(|name| (*name).to_owned()).collect(),
+                })
+                .collect(),
         };
         check(&parsed.program, &config)
             .into_iter()
@@ -293,7 +345,7 @@ pub(crate) mod tests {
         let errors = check_source(
             r#"import { Button } from "@pathscale/ui";
                export const A = () => <Button>go</Button>;"#,
-            &["@pathscale/ui"],
+            &[("@pathscale/ui", &["Button"])],
         );
         assert!(errors.is_empty(), "{errors:?}");
     }
@@ -305,28 +357,35 @@ pub(crate) mod tests {
         let errors = check_source(
             r#"import { Button } from "my-design-system";
                export const A = () => <Button>go</Button>;"#,
-            &["my-design-system"],
+            &[("my-design-system", &["Button"])],
         );
         assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]
-    fn a_component_from_an_unconfigured_source_is_an_error() {
+    fn a_component_from_an_unconfigured_source_is_ordinary_solid() {
         let errors = check_source(
             r#"import { Button } from "some-other-lib";
                export const A = () => <Button>go</Button>;"#,
-            &["@pathscale/ui"],
+            &[("@pathscale/ui", &["Button"])],
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn a_missing_export_from_a_configured_source_is_an_error() {
+        let errors = check_source(
+            r#"import { Card } from "@pathscale/ui";
+               export const A = () => <Card />;"#,
+            &[("@pathscale/ui", &["Button"])],
         );
         assert_eq!(errors.len(), 1);
-        assert!(
-            errors[0].contains("not a configured Layout source"),
-            "{errors:?}"
-        );
+        assert!(errors[0].contains("public export `Card`"), "{errors:?}");
     }
 
     #[test]
     fn an_undeclared_component_is_an_error() {
-        let errors = check_source("export const A = () => <Mystery />;", &["@pathscale/ui"]);
+        let errors = check_source("export const A = () => <Mystery />;", &[]);
         assert_eq!(errors.len(), 1);
         assert!(
             errors[0].contains("neither imported nor declared"),
@@ -344,7 +403,7 @@ pub(crate) mod tests {
             "export const Helper = () => null;\nexport const A = () => <Helper />;",
             "class Helper {}\nexport const A = () => <Helper />;",
         ] {
-            let errors = check_source(source, &["@pathscale/ui"]);
+            let errors = check_source(source, &[]);
             assert!(errors.is_empty(), "{source:?} -> {errors:?}");
         }
     }
@@ -353,7 +412,7 @@ pub(crate) mod tests {
     fn intrinsic_elements_are_not_components() {
         let errors = check_source(
             "export const A = () => <div><span /><my-widget /></div>;",
-            &["@pathscale/ui"],
+            &[],
         );
         assert!(errors.is_empty(), "{errors:?}");
     }
@@ -365,13 +424,13 @@ pub(crate) mod tests {
         let ok = check_source(
             r#"import { Accordion } from "@pathscale/ui";
                export const A = () => <Accordion.Item.Deep />;"#,
-            &["@pathscale/ui"],
+            &[("@pathscale/ui", &["Accordion"])],
         );
         assert!(ok.is_empty(), "{ok:?}");
 
         let bad = check_source(
             "export const A = () => <Accordion.Item />;",
-            &["@pathscale/ui"],
+            &[("@pathscale/ui", &["Accordion"])],
         );
         assert_eq!(bad.len(), 1);
         assert!(bad[0].contains("`Accordion`"), "{bad:?}");
@@ -383,7 +442,7 @@ pub(crate) mod tests {
             r#"import type { ButtonProps } from "@pathscale/ui";
                import { Button } from "@pathscale/ui";
                export const A = () => <Button />;"#,
-            &["@pathscale/ui"],
+            &[("@pathscale/ui", &["Button"])],
         );
         assert!(errors.is_empty(), "{errors:?}");
     }
@@ -392,7 +451,7 @@ pub(crate) mod tests {
     fn one_component_is_reported_once_however_often_it_is_used() {
         let errors = check_source(
             "export const A = () => <><Mystery /><Mystery /><Mystery /></>;",
-            &["@pathscale/ui"],
+            &[],
         );
         assert_eq!(
             errors.len(),
@@ -407,7 +466,27 @@ pub(crate) mod tests {
             r#"import { Button } from "@pathscale/ui";
                import { Widget } from "./ui";
                export const A = () => <><Button /><Widget /></>;"#,
-            &["@pathscale/ui", "./ui"],
+            &[("@pathscale/ui", &["Button"]), ("./ui", &["Widget"])],
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn an_alias_is_checked_by_its_public_export_name() {
+        let errors = check_source(
+            r#"import { Icon as StatusIcon } from "@pathscale/ui";
+               export const A = () => <StatusIcon />;"#,
+            &[("@pathscale/ui", &["Icon"])],
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn a_namespace_member_is_checked_by_its_public_export_name() {
+        let errors = check_source(
+            r#"import * as UI from "@pathscale/ui";
+               export const A = () => <UI.Icon />;"#,
+            &[("@pathscale/ui", &["Icon"])],
         );
         assert!(errors.is_empty(), "{errors:?}");
     }
@@ -428,7 +507,7 @@ mod builtin_tests {
                    <Switch><Match when={z}><Portal><Suspense><ErrorBoundary /></Suspense></Portal></Match></Switch>
                  </Show>
                );"#,
-            &["@pathscale/ui"],
+            &[],
         );
         assert!(errors.is_empty(), "{errors:?}");
     }
@@ -439,7 +518,7 @@ mod builtin_tests {
         let errors = check_source(
             r#"import { Show } from "some-other-lib";
                export const A = () => <Show />;"#,
-            &["@pathscale/ui"],
+            &[("some-other-lib", &[])],
         );
         assert_eq!(errors.len(), 1, "{errors:?}");
     }
@@ -464,20 +543,20 @@ mod locality_tests {
                 &format!(
                     "import {{ Thing }} from \"{specifier}\";\nexport const A = () => <Thing />;"
                 ),
-                &["@pathscale/ui"],
+                &[],
             );
             assert!(errors.is_empty(), "{specifier} -> {errors:?}");
         }
     }
 
     #[test]
-    fn a_scoped_package_is_still_a_package() {
+    fn a_scoped_layout_package_is_not_confused_with_an_alias() {
         // `@pathscale/ui` and `@/components` both start with `@`; only the
         // second is an alias.
         let errors = check_source(
             r#"import { Button } from "@some/other-lib";
                export const A = () => <Button />;"#,
-            &["@pathscale/ui"],
+            &[("@some/other-lib", &[])],
         );
         assert_eq!(
             errors.len(),
@@ -487,11 +566,11 @@ mod locality_tests {
     }
 
     #[test]
-    fn a_package_component_still_needs_a_layout() {
+    fn a_configured_package_component_still_needs_an_exact_layout() {
         let errors = check_source(
             r#"import { Button } from "some-ui-kit";
                export const A = () => <Button />;"#,
-            &["@pathscale/ui"],
+            &[("some-ui-kit", &[])],
         );
         assert_eq!(errors.len(), 1, "{errors:?}");
     }

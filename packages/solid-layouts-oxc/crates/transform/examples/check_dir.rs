@@ -1,6 +1,8 @@
 //! Runs the checker over a directory of real source, so the pass is exercised
 //! against code nobody wrote for it.
-use layouts_common::{LayoutsConfig, LineIndex, Severity, TransformOptions};
+use layouts_common::{
+    CompilerMode, LayoutSource, LayoutsConfig, LineIndex, Severity, TransformOptions,
+};
 use layouts_transform::transform;
 use std::{env, fs, path::Path};
 
@@ -28,7 +30,15 @@ fn main() {
     let config = if layouts.is_empty() {
         LayoutsConfig::default()
     } else {
-        LayoutsConfig { layouts }
+        LayoutsConfig {
+            sources: layouts
+                .into_iter()
+                .map(|module| LayoutSource {
+                    module,
+                    exports: Vec::new(),
+                })
+                .collect(),
+        }
     };
 
     let mut files = Vec::new();
@@ -40,7 +50,7 @@ fn main() {
         let Ok(source) = fs::read_to_string(file) else {
             continue;
         };
-        let mut options = TransformOptions::new(file.to_string_lossy());
+        let mut options = TransformOptions::new(file.to_string_lossy(), CompilerMode::Application);
         options.config = config.clone();
         let result = transform(&source, &options);
         checked += 1;

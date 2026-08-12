@@ -32,9 +32,9 @@ export type LayoutStable<R> = {
   children: JSX.Element;
 };
 
-export type Layout<R> = (
+export type Layout<R, Model = Record<never, never>> = (
   stable: LayoutStable<R>,
-  props: PropsOf<R> & StateOf<R> & Record<string, unknown>,
+  props: PropsOf<R> & StateOf<R> & Model & Record<string, unknown>,
 ) => JSX.Element;
 
 /** Subtree-scoped defaults. The layer `configureUI` cannot express. */
@@ -63,7 +63,10 @@ export function UIDefaults(
   });
 }
 
-export type DefineComponentConfig<R extends Recipe> = {
+export type DefineComponentConfig<
+  R extends Recipe,
+  Model = Record<never, never>,
+> = {
   recipe: R;
   /** The exported name. Only used to look defaults up by. */
   name?: string;
@@ -93,7 +96,7 @@ export type DefineComponentConfig<R extends Recipe> = {
   behaviour?: readonly string[];
   /** Receives behaviour props only, never presentation. */
   setup?: (behaviour: Record<string, unknown>) => Record<string, unknown>;
-  layout?: Layout<R>;
+  layout?: Layout<R, Model>;
   /**
    * Wraps the layout. Assembly, so it does not belong in the markup.
    *
@@ -123,9 +126,12 @@ export type ComponentProps<R extends Recipe, Behaviour = unknown> = PropsOf<R> &
   Behaviour &
   JSX.HTMLAttributes<HTMLElement>;
 
-export function defineComponent<R extends Recipe, Behaviour = unknown>(
-  config: DefineComponentConfig<R>,
-): (props: ComponentProps<R, Behaviour>) => JSX.Element {
+export function defineComponent<
+  R extends Recipe,
+  Model = Record<never, never>,
+>(
+  config: DefineComponentConfig<R, Model>,
+): (props: ComponentProps<R, Model>) => JSX.Element {
   const { recipe, setup, layout, provide } = config;
   const componentName = config.name ?? recipe.config.component;
   const element = config.element ?? recipe.config.element ?? "div";
@@ -139,7 +145,7 @@ export function defineComponent<R extends Recipe, Behaviour = unknown>(
 
   const compiled = recipe.config._layouts;
 
-  return function LayoutComponent(outer: ComponentProps<R, Behaviour>) {
+  return function LayoutComponent(outer: ComponentProps<R, Model>) {
     // The public signature is typed; the body works in terms of a plain record
     // because every split here is by name at runtime, and threading the generic
     // through `splitProps` buys nothing but noise.

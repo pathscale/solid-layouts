@@ -176,6 +176,7 @@ pub fn read(call: &CallExpression<'_>) -> Option<Recipe> {
             }
             "props" => props = axes(value)?,
             "state" => state = axes(value)?,
+            "defaults" => {}
             "tailwind" => {
                 let Expression::BooleanLiteral(literal) = value else {
                     return None;
@@ -391,7 +392,11 @@ mod tests {
     use oxc_span::SourceType;
 
     fn compile(source: &str) -> String {
-        crate::transform(source, &TransformOptions::new("Badge.recipe.ts")).code
+        crate::transform(
+            source,
+            &TransformOptions::new("Badge.recipe.ts", layouts_common::CompilerMode::Library),
+        )
+        .code
     }
 
     fn read_one(source: &str) -> Option<Recipe> {
@@ -498,6 +503,19 @@ export const badge = recipe({
     }
 
     #[test]
+    fn defaults_are_preserved_without_blocking_static_compilation() {
+        let source = r#"const r = recipe({
+          component: "x",
+          slots: { root: {} },
+          props: { size: { sm: "x--sm" } },
+          defaults: { size: "sm" },
+        });"#;
+        let out = compile(source);
+        assert!(out.contains("defaults: { size: \"sm\" }"), "{out}");
+        assert!(out.contains("_layouts:"), "{out}");
+    }
+
+    #[test]
     fn a_class_containing_a_quote_survives_the_round_trip() {
         let out =
             compile(r#"const r = recipe({ component: "x", slots: { root: { base: "a\"b" } } });"#);
@@ -550,7 +568,11 @@ mod emit_tests {
     /// The emitted file must parse. Everything else about the transform is
     /// worthless if the output is not valid source.
     fn assert_emits_valid(source: &str) -> String {
-        let out = crate::transform(source, &TransformOptions::new("R.recipe.ts")).code;
+        let out = crate::transform(
+            source,
+            &TransformOptions::new("R.recipe.ts", layouts_common::CompilerMode::Library),
+        )
+        .code;
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, &out, SourceType::tsx()).parse();
         assert!(

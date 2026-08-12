@@ -33,9 +33,10 @@ cargo check --features napi     # only when building the binding itself
 
 ## Two rules worth knowing before changing anything
 
-**Deleting the pass must leave working code.** The runtime ships and works with no tooling at all;
-the pass only makes it smaller and faster. If removing it changes behaviour rather than size, the
-design is wrong and the change does not land.
+**The library pass is load-bearing.** Authored `.layout.tsx` is Layout template syntax, not an
+ordinary Solid component. The library compiler turns it into valid TSX before packaging. A package
+must not publish the authored template as its executable entry and must not fall back when the
+template or its recipe cannot be matched.
 
 **oxc versions are pinned exactly and bumped deliberately.** `oxc_traverse`'s own documentation
 describes it as codegen-generated and internally steered. The AST changes shape between releases:

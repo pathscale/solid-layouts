@@ -4,28 +4,29 @@
 //! `template()` and `spread()` calls and the prop information this pass needs
 //! is gone afterwards.
 //!
-//! What it will eventually do, in the order the phases land:
+//! The same transform core serves two hosts. The library host turns authored
+//! Layout template syntax into valid package TSX; the application host later
+//! matches those package call sites against application code before Solid's
+//! JSX lowering.
 //!
-//! 1. fold statically known `configureUI` defaults into call sites
-//! 2. erase the generated `defineComponent` wiring and inline the layout call
-//! 3. resolve bare identifiers in a layout against its model
-//! 4. place `@once` where a prop is provably read once
-//!
-//! Deleting this pass must always leave working code. If removing it changes
-//! behaviour rather than size, the design is wrong and the phase does not ship.
+//! The library pass is load-bearing: its input is authoring syntax and its
+//! output is the valid TSX that a Layout UI package carries forward.
 
 pub mod compile_recipe;
 pub mod match_layouts;
 
-use layouts_common::{Diagnostic, FileKind, Severity, TransformOptions, TransformResult};
+use layouts_common::{
+    CompilerMode, Diagnostic, FileKind, Severity, TransformOptions, TransformResult,
+};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    BindingPattern, Declaration, Program, Statement, TSType, TSTypeName, VariableDeclaration,
-    VariableDeclarator,
+    BindingPattern, Declaration, Expression, Program, Statement, TSType, TSTypeName,
+    VariableDeclaration, VariableDeclarator,
 };
 use oxc_codegen::Codegen;
 use oxc_parser::Parser;
-use oxc_span::{SourceType, Span};
+use oxc_semantic::SemanticBuilder;
+use oxc_span::{GetSpan, SourceType, Span};
 
 /// A layout the pass found: the binding it is assigned to, and the recipe its
 /// type annotation names.
@@ -37,6 +38,9 @@ pub struct FoundLayout {
     /// reported rather than guessed at.
     pub recipe: Option<String>,
     pub span: Span,
+    pub parameters: usize,
+    pub parameters_span: Option<Span>,
+    pub body_span: Option<Span>,
 }
 
 /// Runs the pass over one file.
@@ -66,7 +70,9 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
     // one is a hard error rather than a fall-through, because emitting a
     // component whose presentation nobody declared is the outcome the design
     // exists to prevent.
-    diagnostics.extend(match_layouts::check(&parsed.program, &options.config));
+    if options.mode == CompilerMode::Application {
+        diagnostics.extend(match_layouts::check(&parsed.program, &options.config));
+    }
 
     let layouts = find_layouts(&parsed.program);
 
@@ -89,6 +95,15 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
                 layout.span,
             ));
         }
+        if layout.parameters != 0 && layout.parameters != 2 {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "`{}` must use either the Layout template syntax `() =>` or the compiled `({{ slot, children }}, p) =>` signature",
+                    layout.binding
+                ),
+                layout.span,
+            ));
+        }
     }
 
     if options.parse_only || diagnostics.iter().any(|d| d.severity == Severity::Error) {
@@ -102,7 +117,7 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
         };
     }
 
-    let code = compile_recipes(source, &parsed.program);
+    let code = compile_source(source, &parsed.program, &layouts);
     let changed = code != source;
 
     TransformResult {
@@ -118,19 +133,32 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
 /// would reformat the whole file, which turns a one-line semantic change into
 /// an unreviewable diff and breaks every fixture that asserts an untouched
 /// file comes back byte-identical.
-fn compile_recipes(source: &str, program: &Program<'_>) -> String {
-    let recipes = compile_recipe::find_recipes(program);
-    if recipes.is_empty() {
-        return source.to_owned();
-    }
+enum SourceEdit {
+    Insert {
+        at: usize,
+        text: String,
+    },
+    Replace {
+        start: usize,
+        end: usize,
+        text: String,
+    },
+}
 
-    // Indices are assigned across every recipe the compiler can see. Within a
-    // single file that is this file's recipes; a whole-program build passes
-    // the full set, and the numbering is by component name so adding an
-    // unrelated file does not renumber the ones already emitted.
+impl SourceEdit {
+    fn start(&self) -> usize {
+        match self {
+            Self::Insert { at, .. } => *at,
+            Self::Replace { start, .. } => *start,
+        }
+    }
+}
+
+fn compile_source(source: &str, program: &Program<'_>, layouts: &[FoundLayout]) -> String {
+    let recipes = compile_recipe::find_recipes(program);
     let index = compile_recipe::SlotIndex::build(&recipes);
 
-    let mut edits: Vec<(usize, String)> = recipes
+    let mut edits: Vec<SourceEdit> = recipes
         .iter()
         .map(|recipe| {
             // Just inside the object's closing brace.
@@ -152,21 +180,100 @@ fn compile_recipes(source: &str, program: &Program<'_>) -> String {
                 compile_recipe::state_keys(recipe),
                 compile_recipe::slot_ids(recipe, &index),
             );
-            (at, addition)
+            SourceEdit::Insert { at, text: addition }
         })
         .collect();
 
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(program)
+        .semantic;
+    let unresolved = semantic.scoping().root_unresolved_references();
+
+    for layout in layouts.iter().filter(|layout| layout.parameters == 0) {
+        let Some(parameters_span) = layout.parameters_span else {
+            continue;
+        };
+        let Some(body_span) = layout.body_span else {
+            continue;
+        };
+
+        edits.push(SourceEdit::Replace {
+            start: parameters_span.start as usize,
+            end: parameters_span.end as usize,
+            text: "({ slot, children }, p)".to_owned(),
+        });
+
+        for (name, references) in unresolved {
+            for reference_id in references {
+                let reference = semantic.scoping().get_reference(*reference_id);
+                if reference.is_type() && !reference.is_value() {
+                    continue;
+                }
+                let span = semantic.reference_span(reference);
+                if span.start < body_span.start || span.end > body_span.end {
+                    continue;
+                }
+
+                let replacement = match name.as_str() {
+                    "slot" | "children" | "p" => continue,
+                    "local" | "props" | "rawProps" => "p".to_owned(),
+                    name if is_runtime_global(name) => continue,
+                    name => format!("p.{name}"),
+                };
+                edits.push(SourceEdit::Replace {
+                    start: span.start as usize,
+                    end: span.end as usize,
+                    text: replacement,
+                });
+            }
+        }
+    }
+
     // Applied last-first so an earlier splice does not shift the offsets of
     // the ones after it.
-    edits.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+    edits.sort_by_key(|edit| std::cmp::Reverse(edit.start()));
 
     let mut out = source.to_owned();
-    for (at, text) in edits {
-        if at <= out.len() {
-            out.insert_str(at, &text);
+    for edit in edits {
+        match edit {
+            SourceEdit::Insert { at, text } if at <= out.len() => out.insert_str(at, &text),
+            SourceEdit::Replace { start, end, text } if start <= end && end <= out.len() => {
+                out.replace_range(start..end, &text);
+            }
+            _ => {}
         }
     }
     out
+}
+
+fn is_runtime_global(name: &str) -> bool {
+    matches!(
+        name,
+        "Array"
+            | "Boolean"
+            | "Date"
+            | "Error"
+            | "Infinity"
+            | "JSON"
+            | "Map"
+            | "Math"
+            | "NaN"
+            | "Number"
+            | "Object"
+            | "Promise"
+            | "Record"
+            | "RegExp"
+            | "Set"
+            | "String"
+            | "Symbol"
+            | "URL"
+            | "console"
+            | "document"
+            | "globalThis"
+            | "undefined"
+            | "window"
+    )
 }
 
 /// Finds `const X: Layout<typeof recipe> = ...` declarations.
@@ -242,10 +349,22 @@ fn as_layout(declarator: &VariableDeclarator<'_>) -> Option<FoundLayout> {
             _ => None,
         });
 
+    let (parameters, parameters_span, body_span) = match declarator.init.as_ref() {
+        Some(Expression::ArrowFunctionExpression(arrow)) => (
+            arrow.params.items.len() + usize::from(arrow.params.rest.is_some()),
+            Some(arrow.params.span),
+            Some(arrow.body.span()),
+        ),
+        _ => (usize::MAX, None, None),
+    };
+
     Some(FoundLayout {
         binding: binding.name.to_string(),
         recipe,
         span: declarator.span,
+        parameters,
+        parameters_span,
+        body_span,
     })
 }
 
@@ -324,7 +443,10 @@ export const AccordionTriggerLayout: Layout<typeof accordionTrigger> =
     #[test]
     fn a_file_that_does_not_parse_is_returned_untouched() {
         let broken = "export const = ;";
-        let result = transform(broken, &TransformOptions::new("Broken.layout.tsx"));
+        let result = transform(
+            broken,
+            &TransformOptions::new("Broken.layout.tsx", CompilerMode::Library),
+        );
         assert_eq!(result.code, broken);
         assert!(!result.changed);
         assert!(!result.diagnostics.is_empty());
@@ -334,15 +456,52 @@ export const AccordionTriggerLayout: Layout<typeof accordionTrigger> =
     fn a_layout_file_with_no_layout_is_a_warning() {
         let result = transform(
             "export const x = 1;",
-            &TransformOptions::new("Empty.layout.tsx"),
+            &TransformOptions::new("Empty.layout.tsx", CompilerMode::Library),
         );
         assert_eq!(result.diagnostics.len(), 1);
     }
 
     #[test]
     fn an_ordinary_file_with_no_layout_is_silent() {
-        let result = transform("export const x = 1;", &TransformOptions::new("plain.ts"));
+        let result = transform(
+            "export const x = 1;",
+            &TransformOptions::new("plain.ts", CompilerMode::Library),
+        );
         assert!(result.diagnostics.is_empty());
         assert!(!result.changed);
+    }
+
+    #[test]
+    fn compiles_template_parameters_and_unbound_model_references() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { icon } from "./Icon.recipe";
+const Icon: Layout<typeof icon, IconProps> = () => {
+  const width = local.width ?? 24;
+  return <span {...slot.root} style={style}>{children}{props.name}</span>;
+};
+"#;
+        let result = transform(
+            source,
+            &TransformOptions::new("Icon.layout.tsx", CompilerMode::Library),
+        );
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.code.contains("({ slot, children }, p) =>"),
+            "{}",
+            result.code
+        );
+        assert!(result.code.contains("p.width"), "{}", result.code);
+        assert!(result.code.contains("style={p.style}"), "{}", result.code);
+        assert!(result.code.contains("{p.name}"), "{}", result.code);
+        assert!(!result.code.contains("local.width"), "{}", result.code);
+
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &result.code, SourceType::tsx()).parse();
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "compiled Layout must be valid TSX: {:?}\n{}",
+            parsed.diagnostics,
+            result.code
+        );
     }
 }

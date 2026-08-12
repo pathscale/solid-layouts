@@ -19,6 +19,28 @@ pub enum FileKind {
     Other,
 }
 
+/// Which half of the two-stage pipeline is invoking the shared transform.
+///
+/// A host must select this explicitly. Inferring it from a filename or from
+/// the presence of a manifest is ambiguous in a monorepo that builds both a
+/// component library and an application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CompilerMode {
+    Library,
+    Application,
+}
+
+/// One resolved Layout package available to an application build.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutSource {
+    /// The module specifier as application code imports it.
+    pub module: String,
+    /// Public component exports proven by that package's Layout manifest.
+    pub exports: Vec<String>,
+}
+
 impl FileKind {
     /// Classifies by filename rather than by content.
     ///
@@ -45,13 +67,13 @@ impl FileKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutsConfig {
-    pub layouts: Vec<String>,
+    pub sources: Vec<LayoutSource>,
 }
 
 impl Default for LayoutsConfig {
     fn default() -> Self {
         Self {
-            layouts: vec!["@pathscale/ui".to_owned()],
+            sources: Vec::new(),
         }
     }
 }
@@ -60,6 +82,7 @@ impl Default for LayoutsConfig {
 #[serde(rename_all = "camelCase")]
 pub struct TransformOptions {
     pub filename: String,
+    pub mode: CompilerMode,
     #[serde(default)]
     pub config: LayoutsConfig,
     /// Off by default. With it set the pass parses and returns the source
@@ -70,9 +93,10 @@ pub struct TransformOptions {
 }
 
 impl TransformOptions {
-    pub fn new(filename: impl Into<String>) -> Self {
+    pub fn new(filename: impl Into<String>, mode: CompilerMode) -> Self {
         Self {
             filename: filename.into(),
+            mode,
             config: LayoutsConfig::default(),
             parse_only: false,
         }
@@ -235,13 +259,16 @@ mod tests {
     }
 
     #[test]
-    fn layouts_default_to_the_reference_library_but_are_not_hardcoded() {
-        assert_eq!(LayoutsConfig::default().layouts, vec!["@pathscale/ui"]);
-
+    fn layout_sources_are_explicit_and_not_hardcoded() {
+        assert!(LayoutsConfig::default().sources.is_empty());
         let mine = LayoutsConfig {
-            layouts: vec!["my-design-system".to_owned(), "./src/ui".to_owned()],
+            sources: vec![LayoutSource {
+                module: "my-design-system".to_owned(),
+                exports: vec!["Button".to_owned()],
+            }],
         };
-        assert_eq!(mine.layouts.len(), 2);
+        assert_eq!(mine.sources.len(), 1);
+        assert_eq!(mine.sources[0].exports, vec!["Button"]);
     }
 
     #[test]

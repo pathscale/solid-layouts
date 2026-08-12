@@ -3,7 +3,7 @@
 const { transform } = require("./index.js");
 
 /**
- * The Layouts pre-pass, as a webpack/rspack loader.
+ * The application Layouts pass, as a webpack/rspack loader.
  *
  * It has to run *before* the Solid JSX transform. By the time that has run
  * there is no `<Accordion.Trigger>` left to match against a Layout — only
@@ -29,7 +29,8 @@ module.exports = function layoutsLoader(source) {
   let result;
   try {
     result = transform(source, filename, {
-      layouts: options.layouts,
+      mode: options.mode,
+      layoutSources: options.layoutSources,
       parseOnly: options.parseOnly,
     });
   } catch (error) {
