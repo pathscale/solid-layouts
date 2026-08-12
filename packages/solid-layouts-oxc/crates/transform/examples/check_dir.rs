@@ -36,6 +36,7 @@ fn main() {
                 .map(|module| LayoutSource {
                     module,
                     exports: Vec::new(),
+                    resolved: None,
                 })
                 .collect(),
         }

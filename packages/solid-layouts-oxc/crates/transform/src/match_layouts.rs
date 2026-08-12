@@ -331,6 +331,7 @@ pub(crate) mod tests {
                 .map(|(module, exports)| LayoutSource {
                     module: (*module).to_owned(),
                     exports: exports.iter().map(|name| (*name).to_owned()).collect(),
+                    resolved: None,
                 })
                 .collect(),
         };

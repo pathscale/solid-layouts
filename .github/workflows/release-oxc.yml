@@ -71,6 +71,7 @@ jobs:
               `import { recipe } from "solid-layouts";
                export const r = recipe({ component: "r", element: "div", slots: { root: { base: "r" } } });`,
               "/x/R.recipe.ts",
+              { mode: "library" },
             );
             if (!out.code.includes("_layouts")) throw new Error("the pass did not emit");
             console.log("ok");

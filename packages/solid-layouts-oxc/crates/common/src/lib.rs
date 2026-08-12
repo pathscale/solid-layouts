@@ -39,6 +39,11 @@ pub struct LayoutSource {
     pub module: String,
     /// Public component exports proven by that package's Layout manifest.
     pub exports: Vec<String>,
+    /// Absolute public entry resolved and validated by the application host.
+    /// Application mode rewrites the package import to this file before the
+    /// normal bundler resolver runs.
+    #[serde(default)]
+    pub resolved: Option<String>,
 }
 
 impl FileKind {
@@ -64,18 +69,10 @@ impl FileKind {
 /// library is useless to them. Entries are resolved through the import graph:
 /// `import { Button } from "@pathscale/ui"` looks Button up in that package's
 /// set, `from "./ui"` looks in the local one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutsConfig {
     pub sources: Vec<LayoutSource>,
-}
-
-impl Default for LayoutsConfig {
-    fn default() -> Self {
-        Self {
-            sources: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,6 +262,7 @@ mod tests {
             sources: vec![LayoutSource {
                 module: "my-design-system".to_owned(),
                 exports: vec!["Button".to_owned()],
+                resolved: Some("/packages/my-design-system/index.ts".to_owned()),
             }],
         };
         assert_eq!(mine.sources.len(), 1);

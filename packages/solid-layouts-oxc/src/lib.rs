@@ -56,6 +56,7 @@ mod binding {
     pub struct JsLayoutSource {
         pub module: String,
         pub exports: Vec<String>,
+        pub resolved: Option<String>,
     }
 
     #[napi]
@@ -77,6 +78,7 @@ mod binding {
                 .map(|source| layouts_common::LayoutSource {
                     module: source.module,
                     exports: source.exports,
+                    resolved: source.resolved,
                 })
                 .collect();
         }

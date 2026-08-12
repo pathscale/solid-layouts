@@ -291,6 +291,7 @@ dependencies = [
  "oxc_parser",
  "oxc_semantic",
  "oxc_span",
+ "serde_json",
 ]
 
 [[package]]

@@ -117,7 +117,10 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
         };
     }
 
-    let code = compile_source(source, &parsed.program, &layouts);
+    let code = match options.mode {
+        CompilerMode::Library => compile_library_source(source, &parsed.program, &layouts),
+        CompilerMode::Application => compile_application_source(source, &parsed.program, options),
+    };
     let changed = code != source;
 
     TransformResult {
@@ -154,7 +157,53 @@ impl SourceEdit {
     }
 }
 
-fn compile_source(source: &str, program: &Program<'_>, layouts: &[FoundLayout]) -> String {
+fn apply_edits(source: &str, mut edits: Vec<SourceEdit>) -> String {
+    edits.sort_by_key(|edit| std::cmp::Reverse(edit.start()));
+
+    let mut out = source.to_owned();
+    for edit in edits {
+        match edit {
+            SourceEdit::Insert { at, text } if at <= out.len() => out.insert_str(at, &text),
+            SourceEdit::Replace { start, end, text } if start <= end && end <= out.len() => {
+                out.replace_range(start..end, &text);
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn compile_application_source(
+    source: &str,
+    program: &Program<'_>,
+    options: &TransformOptions,
+) -> String {
+    let mut edits = Vec::new();
+    for statement in &program.body {
+        let Statement::ImportDeclaration(import) = statement else {
+            continue;
+        };
+        let Some(layout_source) = options
+            .config
+            .sources
+            .iter()
+            .find(|candidate| import.source.value == candidate.module)
+        else {
+            continue;
+        };
+        let Some(resolved) = &layout_source.resolved else {
+            continue;
+        };
+        edits.push(SourceEdit::Replace {
+            start: import.source.span.start as usize,
+            end: import.source.span.end as usize,
+            text: serde_json::to_string(resolved).expect("a resolved module path is serializable"),
+        });
+    }
+    apply_edits(source, edits)
+}
+
+fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundLayout]) -> String {
     let recipes = compile_recipe::find_recipes(program);
     let index = compile_recipe::SlotIndex::build(&recipes);
 
@@ -230,21 +279,7 @@ fn compile_source(source: &str, program: &Program<'_>, layouts: &[FoundLayout]) 
         }
     }
 
-    // Applied last-first so an earlier splice does not shift the offsets of
-    // the ones after it.
-    edits.sort_by_key(|edit| std::cmp::Reverse(edit.start()));
-
-    let mut out = source.to_owned();
-    for edit in edits {
-        match edit {
-            SourceEdit::Insert { at, text } if at <= out.len() => out.insert_str(at, &text),
-            SourceEdit::Replace { start, end, text } if start <= end && end <= out.len() => {
-                out.replace_range(start..end, &text);
-            }
-            _ => {}
-        }
-    }
-    out
+    apply_edits(source, edits)
 }
 
 fn is_runtime_global(name: &str) -> bool {
@@ -503,5 +538,40 @@ const Icon: Layout<typeof icon, IconProps> = () => {
             parsed.diagnostics,
             result.code
         );
+    }
+
+    #[test]
+    fn application_mode_rewrites_a_validated_package_import_to_c() {
+        let source = r#"import { Icon as StatusIcon } from "@pathscale/test-ui";
+export const View = () => <StatusIcon />;
+"#;
+        let mut options = TransformOptions::new("View.tsx", CompilerMode::Application);
+        options.config.sources.push(layouts_common::LayoutSource {
+            module: "@pathscale/test-ui".to_owned(),
+            exports: vec!["Icon".to_owned()],
+            resolved: Some("/packages/test-ui/index.ts".to_owned()),
+        });
+
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.changed);
+        assert!(
+            result.code.contains("from \"/packages/test-ui/index.ts\""),
+            "{}",
+            result.code
+        );
+        assert!(result.code.contains("<StatusIcon />"), "{}", result.code);
+    }
+
+    #[test]
+    fn application_mode_leaves_unconfigured_imports_untouched() {
+        let source = r#"import { Widget } from "some-other-library";
+export const View = () => <Widget />;
+"#;
+        let options = TransformOptions::new("View.tsx", CompilerMode::Application);
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(!result.changed);
+        assert_eq!(result.code, source);
     }
 }

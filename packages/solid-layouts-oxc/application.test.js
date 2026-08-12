@@ -47,7 +47,11 @@ test("resolves an exact component index from C and accepts its public export", (
   const { root } = fixture();
   const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
   expect(application.layoutSources).toEqual([
-    { module: "@pathscale/test-ui", exports: ["Icon"] },
+    {
+      module: "@pathscale/test-ui",
+      exports: ["Icon"],
+      resolved: resolve(__dirname, "../../Test-UI/bundle/index.ts"),
+    },
   ]);
   const result = compileApplicationFile(
     'import { Icon as StatusIcon } from "@pathscale/test-ui"; export const View = () => <StatusIcon />;',
@@ -55,6 +59,8 @@ test("resolves an exact component index from C and accepts its public export", (
     application,
   );
   expect(result.failed).toBe(false);
+  expect(result.changed).toBe(true);
+  expect(result.code).toContain(application.layoutSources[0].resolved);
 });
 
 test("rejects a public export absent from C's manifest", () => {
@@ -75,6 +81,18 @@ test("rejects a package with no Layout manifest discovery field", () => {
   writeFileSync(join(copy, "package.json"), '{"name":"@pathscale/test-ui"}\n');
   expect(() => compileApplication({ root, layouts: ["@pathscale/test-ui"] })).toThrow(
     "has no solidLayouts field",
+  );
+});
+
+test("rejects C when its shared runtime dependency is undeclared", () => {
+  const { root, packageRoot } = fixture();
+  const copy = makePackageEditable(root, packageRoot);
+  const packageJsonPath = join(copy, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  delete packageJson.peerDependencies["solid-layouts"];
+  writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+  expect(() => compileApplication({ root, layouts: ["@pathscale/test-ui"] })).toThrow(
+    "must declare solid-layouts as a peer dependency",
   );
 });
 

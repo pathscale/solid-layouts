@@ -91,3 +91,39 @@ jobs:
 
       # Runs the conformance corpus in `fixtures/` as well as the unit tests.
       - run: cargo test --workspace
+
+  compiler-hosts:
+    name: compiler hosts (bun + native binding)
+    runs-on: ubicloud-standard-2
+    defaults:
+      run:
+        working-directory: packages/solid-layouts-oxc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/solid-layouts-oxc
+
+      - name: Build the local native binding
+        run: ./scripts/build-binding.sh
+
+      - name: Test the library compiler host
+        run: bun run test:library
+
+      - name: Test the application compiler host
+        run: bun run test:application
+
+      - name: Regenerate the one-component package fixture
+        working-directory: Test-UI
+        run: bun ../packages/solid-layouts-oxc/bin/solid-layouts-library.js
+
+      - name: Fail if the checked-in package fixture was stale
+        working-directory: .
+        run: git diff --exit-code -- Test-UI/bundle

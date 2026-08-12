@@ -39,6 +39,20 @@ function requiredFile(packageRoot, path, label) {
   return absolute;
 }
 
+function publicEntryFrom(packageJson) {
+  const rootExport = packageJson.exports?.["."];
+  if (typeof rootExport === "string") return rootExport;
+  if (rootExport && typeof rootExport === "object") {
+    for (const condition of ["import", "default"]) {
+      if (typeof rootExport[condition] === "string") return rootExport[condition];
+    }
+  }
+  for (const field of ["module", "main"]) {
+    if (typeof packageJson[field] === "string") return packageJson[field];
+  }
+  throw new Error(`${packageJson.name} has no public JavaScript entry`);
+}
+
 function validateComponent(module, packageRoot, name, component) {
   for (const key of ["entry", "recipe", "recipeExport", "layout", "layoutExport"]) {
     if (!component?.[key]) {
@@ -92,6 +106,14 @@ function resolveLayoutSource(root, configured) {
   if (typeof packageJson.solidLayouts !== "string" || !packageJson.solidLayouts) {
     throw new Error(`${module} has no solidLayouts field in ${packageJsonPath}`);
   }
+  if (typeof packageJson.peerDependencies?.["solid-layouts"] !== "string") {
+    throw new Error(`${module} must declare solid-layouts as a peer dependency`);
+  }
+  const publicEntry = requiredFile(
+    packageRoot,
+    publicEntryFrom(packageJson),
+    `${module} public entry`,
+  );
 
   const manifestPath = requiredFile(
     packageRoot,
@@ -114,7 +136,15 @@ function resolveLayoutSource(root, configured) {
   if (exports.length === 0) throw new Error(`${module} Layout manifest has no components`);
   for (const name of exports) validateComponent(module, packageRoot, name, components[name]);
 
-  return { module, exports, packageRoot, packageJsonPath, manifestPath, manifest };
+  return {
+    module,
+    exports,
+    publicEntry,
+    packageRoot,
+    packageJsonPath,
+    manifestPath,
+    manifest,
+  };
 }
 
 function compileApplication(options = {}) {
@@ -127,7 +157,11 @@ function compileApplication(options = {}) {
   return {
     root,
     sources,
-    layoutSources: sources.map(({ module, exports }) => ({ module, exports })),
+    layoutSources: sources.map(({ module, exports, publicEntry }) => ({
+      module,
+      exports,
+      resolved: publicEntry,
+    })),
   };
 }
 
