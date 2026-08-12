@@ -71,6 +71,16 @@ export type DefineComponentConfig<R extends Recipe> = {
   element?: string;
   /** Library defaults, the lowest layer of the cascade. */
   defaults?: ComponentDefaults;
+  /**
+   * The prop names this component's logic consumes.
+   *
+   * Declared for the same reason presentation is: without it there is no way
+   * to tell `onValueChange`, which belongs to the logic, from `onClick`, which
+   * belongs on the element. Anything in neither list is plain HTML and passes
+   * through untouched, which is what `id`, `aria-*`, `title` and
+   * `data-testid` need.
+   */
+  behaviour?: readonly string[];
   /** Receives behaviour props only, never presentation. */
   setup?: (behaviour: Record<string, unknown>) => Record<string, unknown>;
   layout?: Layout<R>;
@@ -92,6 +102,7 @@ export function defineComponent<R extends Recipe>(
   const componentName = config.name ?? recipe.config.component;
   const element = config.element ?? recipe.config.element ?? "div";
 
+  const behaviourKeys = config.behaviour ?? [];
   const presentationKeys = Object.keys(recipe.config.props ?? {});
   const stateKeys = Object.keys(recipe.config.state ?? {});
   const slotNames = Object.keys(recipe.config.slots);
@@ -101,16 +112,34 @@ export function defineComponent<R extends Recipe>(
   return function LayoutComponent(props) {
     const subtree = useContext(UIDefaultsContext);
     const instance = nextInstance();
-    /** The id of one of this instance's slots, for aria wiring. */
-    const idOf = (slot: string) => slotId(compiled?.slotIds, slot, instance);
+    /**
+     * The id of one of this instance's slots, for aria wiring.
+     *
+     * A user-set `id` wins on the root and becomes the base for the rest, so
+     * `aria-controls` points at the element the author actually named rather
+     * than at a generated id the DOM does not carry.
+     */
+    const idOf = (slot: string) => {
+      const given = (props as Record<string, unknown>).id;
+      if (typeof given === "string") {
+        return slot === "root" ? given : `${given}-${slot}`;
+      }
+      return slotId(compiled?.slotIds, slot, instance);
+    };
 
-    // Three-way split by origin: what the recipe declares is presentation, the
-    // universal four are the consumer's escape hatches, and everything left is
-    // behaviour and belongs to the logic.
-    const [presentation, escape, behaviour] = splitProps(
+    // Four-way split by destination. What the recipe declares is presentation;
+    // the universal four are the consumer's escape hatches; what the component
+    // declares is behaviour and goes to the logic; everything left is plain
+    // HTML and belongs on the element.
+    //
+    // The fourth bucket is not optional. Without it `id`, `onClick`,
+    // `aria-label` and `data-testid` were swallowed as behaviour and never
+    // reached the DOM at all.
+    const [presentation, escape, behaviour, passthrough] = splitProps(
       props,
       presentationKeys,
       ["class", "className", "style", "children"],
+      behaviourKeys as string[],
     );
 
     // `slotId` reaches the logic as well as the layout: an accordion item has
@@ -208,8 +237,10 @@ export function defineComponent<R extends Recipe>(
           get children() {
             return kids();
           },
-          // Spread last so the recipe's class and data attributes win over
-          // anything an unrecognised prop happened to set.
+          // Pass-through first, the recipe's attributes last: a caller may set
+          // `id` or `aria-label`, but must not be able to overwrite the class
+          // or the `data-slot` that identifies the component.
+          ...passthrough,
           ...spreadable(() => resolved().root),
         });
 

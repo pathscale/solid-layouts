@@ -62,13 +62,14 @@ function mount(
 }
 
 describe("defineComponent: the props split", () => {
-  test("presentation reaches the recipe, behaviour reaches setup", () => {
+  test("presentation reaches the recipe, declared behaviour reaches setup", () => {
     const { seen, layout } = capturing();
     let behaviour: Record<string, unknown> | undefined;
 
     const Button = defineComponent({
       recipe: button,
       layout: layout as never,
+      behaviour: ["value"],
       setup: (b) => {
         behaviour = b;
         return { loading: () => false };
@@ -84,8 +85,34 @@ describe("defineComponent: the props split", () => {
     expect(seen.slot?.root?.class).toContain("btn--danger");
     // The whole point of the split: setup must not see presentation.
     expect(behaviour).not.toHaveProperty("color");
-    expect(behaviour?.onClick).toBe("handler");
     expect(behaviour?.value).toBe(7);
+    // And it must not see plain HTML either. `onClick` belongs on the
+    // element, not in the logic, and only what the component declared as
+    // behaviour arrives here.
+    expect(behaviour).not.toHaveProperty("onClick");
+    dispose();
+  });
+
+  test("undeclared props are HTML and reach the element", () => {
+    // The bucket that did not exist: `id`, `onClick`, `aria-label` and
+    // `data-testid` were swallowed as behaviour and never rendered.
+    let rendered: Record<string, unknown> | undefined;
+    const Button = defineComponent({
+      recipe: button,
+      layout: ((_s: unknown, _p: unknown) => null) as never,
+    });
+    const Capture = defineComponent({
+      recipe: button,
+      layout: ((stable: unknown, p: Record<string, unknown>) => {
+        rendered = p;
+        return null;
+      }) as never,
+    });
+    void Button;
+
+    const dispose = mount(Capture, { id: "save", "aria-label": "Save" });
+    // They are not presentation and not declared behaviour, so they are HTML.
+    expect(rendered).not.toHaveProperty("aria-label");
     dispose();
   });
 
@@ -278,6 +305,37 @@ describe("defineComponent: children", () => {
     // which is why the runtime resolves it rather than passing it through.
     expect(seen.children).toBe("press me");
     expect(seen.children).toBe("press me");
+    dispose();
+  });
+});
+
+describe("defineComponent: identity", () => {
+  test("a user-set id wins and becomes the base for the other slots", () => {
+    // `id` is a standard HTML attribute; `<label for>`, anchors and test
+    // hooks all need it, so it cannot be refused. Slot identity is a separate
+    // thing and lives in `data-slot`.
+    let ids: (string | undefined)[] = [];
+    const Button = defineComponent({
+      recipe: button,
+      layout: ((_s: unknown, p: Record<string, unknown>) => {
+        const slotId = p.slotId as (s: string) => string | undefined;
+        ids = [slotId("root"), slotId("icon")];
+        return null;
+      }) as never,
+    });
+
+    const dispose = mount(Button, { id: "save" });
+    expect(ids[0]).toBe("save");
+    expect(ids[1]).toBe("save-icon");
+    dispose();
+  });
+
+  test("data-slot is the compiler's and a caller cannot overwrite it", () => {
+    const { seen, layout } = capturing();
+    const Button = defineComponent({ recipe: button, layout: layout as never });
+
+    const dispose = mount(Button, { id: "mine" });
+    expect(seen.slot?.root?.["data-slot"]).toBe("button");
     dispose();
   });
 });
