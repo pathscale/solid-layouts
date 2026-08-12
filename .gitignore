@@ -6,3 +6,5 @@ dist/
 *.node
 packages/*/index.js
 packages/*/index.d.ts
+!packages/solid-layouts-oxc/index.js
+!packages/solid-layouts-oxc/index.d.ts
