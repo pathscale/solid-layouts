@@ -257,7 +257,7 @@ export function defineComponent<R extends Recipe>(
           // Pass-through first, the recipe's attributes last: a caller may set
           // `id` or `aria-label`, but must not be able to overwrite the class
           // or the `data-slot` that identifies the component.
-          ...passthrough,
+          ...asAttributes(passthrough as Record<string, unknown>),
           ...spreadable(() => resolved().root),
         });
 
@@ -272,6 +272,50 @@ export function defineComponent<R extends Recipe>(
       },
     });
   };
+}
+
+/**
+ * Renames camelCased `data*` props to the attributes they mean.
+ *
+ * A caller writes `dataTheme="dark"` because that is what the prop is called in
+ * TypeScript, but the DOM wants `data-theme`. Solid sets unknown props as
+ * attributes verbatim, so without this the element gets a literal `dataTheme`
+ * attribute and every `[data-theme]` selector misses. It is one rule rather
+ * than a per-component concern: `dataTheme` is on roughly forty components.
+ *
+ * The lookup is lazy, so a prop that changes still reaches the element.
+ */
+export function asAttributes(
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  const toAttribute = (key: string): string =>
+    /^data[A-Z]/.test(key)
+      ? `data-${key.slice(4).replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`
+      : key;
+
+  const back = new Map<string, string>();
+  for (const key of Object.keys(props)) {
+    const attribute = toAttribute(key);
+    if (attribute !== key) back.set(attribute, key);
+  }
+  if (back.size === 0) return props;
+
+  return new Proxy(props, {
+    get: (target, key) =>
+      target[back.get(key as string) ?? (key as string)] as unknown,
+    has: (target, key) =>
+      back.has(key as string) || Reflect.has(target, key),
+    ownKeys: (target) => Reflect.ownKeys(target).map((key) => toAttribute(key as string)),
+    getOwnPropertyDescriptor: (target, key) => {
+      const source = back.get(key as string) ?? (key as string);
+      if (!Reflect.has(target, source)) return undefined;
+      return {
+        enumerable: true,
+        configurable: true,
+        get: () => target[source] as unknown,
+      };
+    },
+  }) as Record<string, unknown>;
 }
 
 /**

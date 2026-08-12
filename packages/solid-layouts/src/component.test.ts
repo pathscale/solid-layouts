@@ -7,7 +7,7 @@ import { createRenderEffect, createRoot, createSignal } from "solid-js";
 // effects run once and signals never propagate. Every reactivity assertion
 // below would then pass while testing nothing, which is worse than failing:
 // `createRenderEffect(() => log.push(n()))` records `[0]` and stays there.
-import { defineComponent } from "./component";
+import { asAttributes, defineComponent } from "./component";
 import { configureUI, resetUIConfig } from "./defaults";
 import { recipe } from "./recipe";
 import type { SlotAttrs } from "./types";
@@ -114,6 +114,38 @@ describe("defineComponent: the props split", () => {
     // They are not presentation and not declared behaviour, so they are HTML.
     expect(rendered).not.toHaveProperty("aria-label");
     dispose();
+  });
+
+  test("camelCased data props become the attributes they mean", () => {
+    // `dataTheme` is the prop name in TypeScript on roughly forty components,
+    // but the DOM wants `data-theme`. Solid sets unknown props verbatim, so
+    // without the rename the element carries a literal `dataTheme` attribute
+    // and every `[data-theme]` selector misses it.
+    let theme = "dark";
+    const attributes = asAttributes({
+      get dataTheme() {
+        return theme;
+      },
+      dataTestId: "save",
+      id: "save",
+    });
+
+    expect(Object.keys(attributes).sort()).toEqual([
+      "data-test-id",
+      "data-theme",
+      "id",
+    ]);
+    expect(attributes["data-theme"]).toBe("dark");
+    expect(attributes.id).toBe("save");
+
+    // Lazily, so a prop that changes still reaches the element.
+    theme = "light";
+    expect(attributes["data-theme"]).toBe("light");
+
+    // A component with nothing to rename is handed back untouched, rather
+    // than wrapped in a proxy it does not need.
+    const plain = { id: "save" };
+    expect(asAttributes(plain)).toBe(plain);
   });
 
   test("class and style are the consumer's, not the logic's", () => {
