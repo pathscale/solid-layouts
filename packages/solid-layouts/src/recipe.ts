@@ -1,5 +1,10 @@
 import { cx } from "./cx";
-import type { RecipeConfig, SlotAttrs, VariantClasses } from "./types";
+import type {
+  CompiledRecipe,
+  RecipeConfig,
+  SlotAttrs,
+  VariantClasses,
+} from "./types";
 
 /**
  * Every declared slot, resolved.
@@ -84,10 +89,62 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
     );
   }
 
+  const compiled = config.__compiled;
+
+  /**
+   * The compiled path: index the table rather than walk the configuration.
+   *
+   * Identical output to the interpreted path below, which the tests assert by
+   * running the same cases through both. If they ever diverge the compiler is
+   * wrong, not the runtime, because this is the one the compiler targets.
+   */
+  function resolveCompiled(
+    table: CompiledRecipe,
+    selection: Record<string, unknown>,
+    overrides?: string,
+  ): ResolvedSlots {
+    const out: Record<string, SlotAttrs> = {};
+
+    for (const slot in table.slots) {
+      const entry = table.slots[slot];
+      if (!entry) continue;
+
+      let classes = entry.base;
+      for (const axis in entry.axes) {
+        const key = selectedKey(selection[axis]);
+        if (key === undefined) continue;
+        const found = entry.axes[axis]?.[key];
+        if (found) classes = cx(classes, found);
+      }
+
+      const attrs: SlotAttrs = { class: classes };
+
+      for (const axis of table.stateKeys) {
+        const value = selection[axis];
+        if (value !== undefined && value !== null) {
+          attrs[`data-${axis}`] = String(value);
+        }
+      }
+
+      attrs["data-slot"] =
+        slot === "root" ? config.component : `${config.component}-${slot}`;
+
+      if (slot === "root" && overrides) {
+        attrs.class = cx(attrs.class, overrides);
+      }
+
+      out[slot] = attrs;
+    }
+
+    return out as ResolvedSlots;
+  }
+
   function resolve(
     selection: Record<string, unknown>,
     overrides?: string,
   ): ResolvedSlots {
+    if (compiled) return resolveCompiled(compiled, selection, overrides);
+
     const out: Record<string, SlotAttrs> = {};
 
     for (const slot of slotNames) {

@@ -42,6 +42,32 @@ export type RecipeConfig = {
    * far cheaper.
    */
   tailwind?: boolean;
+  /**
+   * Written by the compiler, never by hand.
+   *
+   * The same information as `slots`, `props` and `state`, arranged so it can
+   * be indexed instead of walked: slot, then variant axis, then value, to the
+   * class that combination contributes. Deciding at compile time which slot a
+   * bare-string variant reaches, and which axes touch a given slot, means the
+   * runtime does neither on any render.
+   *
+   * Absent when the recipe could not be compiled, which happens whenever any
+   * part of the declaration is not a literal. The runtime then walks the
+   * configuration as before, so a computed recipe still works.
+   */
+  __compiled?: CompiledRecipe;
+};
+
+export type CompiledSlot = {
+  base: string;
+  /** axis name to value to class, for this slot only. */
+  axes: Record<string, Record<string, string>>;
+};
+
+export type CompiledRecipe = {
+  slots: Record<string, CompiledSlot>;
+  /** The axes that mirror to `data-*`. Declaration order. */
+  stateKeys: string[];
 };
 
 /** The attributes a resolved slot contributes to its element. */

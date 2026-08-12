@@ -14,9 +14,10 @@
 //! Deleting this pass must always leave working code. If removing it changes
 //! behaviour rather than size, the design is wrong and the phase does not ship.
 
+pub mod compile_recipe;
 pub mod match_layouts;
 
-use layouts_common::{Diagnostic, FileKind, TransformOptions, TransformResult};
+use layouts_common::{Diagnostic, FileKind, Severity, TransformOptions, TransformResult};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     BindingPattern, Declaration, Program, Statement, TSType, TSTypeName, VariableDeclaration,
@@ -90,14 +91,75 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
         }
     }
 
-    // Nothing is rewritten yet. Round-tripping through the code generator would
-    // reformat every file for no benefit, so `parse_only` and the not-yet-
-    // implemented phases both return the original text untouched.
-    TransformResult {
-        code: source.to_owned(),
-        diagnostics,
-        changed: false,
+    if options.parse_only || diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        // A file with errors is returned as it arrived. Emitting a partial
+        // rewrite of source the author has to fix anyway turns one problem
+        // into two.
+        return TransformResult {
+            code: source.to_owned(),
+            diagnostics,
+            changed: false,
+        };
     }
+
+    let code = compile_recipes(source, &parsed.program);
+    let changed = code != source;
+
+    TransformResult {
+        code,
+        diagnostics,
+        changed,
+    }
+}
+
+/// Splices each recipe's precomputed lookup table into its declaration.
+///
+/// Text splicing rather than regenerating from the AST: the code generator
+/// would reformat the whole file, which turns a one-line semantic change into
+/// an unreviewable diff and breaks every fixture that asserts an untouched
+/// file comes back byte-identical.
+fn compile_recipes(source: &str, program: &Program<'_>) -> String {
+    let recipes = compile_recipe::find_recipes(program);
+    if recipes.is_empty() {
+        return source.to_owned();
+    }
+
+    let mut edits: Vec<(usize, String)> = recipes
+        .iter()
+        .map(|recipe| {
+            // Just inside the object's closing brace.
+            let at = (recipe.argument_span.end as usize) - 1;
+
+            // A trailing comma is idiomatic and extremely common, and blindly
+            // prefixing another produces `,,` which does not parse. An empty
+            // object needs no separator either. Found by feeding the emitted
+            // file back to the parser rather than by reading the code.
+            let previous = source[..at].trim_end().chars().last();
+            let separator = match previous {
+                Some(',') | Some('{') | None => "",
+                _ => ",",
+            };
+
+            let addition = format!(
+                "{separator}__compiled:{{slots:{},stateKeys:{}}}",
+                compile_recipe::table(recipe),
+                compile_recipe::state_keys(recipe),
+            );
+            (at, addition)
+        })
+        .collect();
+
+    // Applied last-first so an earlier splice does not shift the offsets of
+    // the ones after it.
+    edits.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+
+    let mut out = source.to_owned();
+    for (at, text) in edits {
+        if at <= out.len() {
+            out.insert_str(at, &text);
+        }
+    }
+    out
 }
 
 /// Finds `const X: Layout<typeof recipe> = ...` declarations.
