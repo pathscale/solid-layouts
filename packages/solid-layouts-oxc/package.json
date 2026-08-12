@@ -17,10 +17,14 @@
   },
   "files": [
     "index.js",
-    "index.d.ts",
     "loader.js",
-    "loader.d.ts",
-    "*.node"
+    "*.node",
+    "src",
+    "crates",
+    "Cargo.toml",
+    "Cargo.lock",
+    "build.rs",
+    "scripts"
   ],
   "napi": {
     "binaryName": "solid-layouts-oxc",
@@ -33,7 +37,8 @@
   },
   "scripts": {
     "build": "napi build --platform --release --features napi",
-    "build:debug": "napi build --platform --features napi"
+    "build:debug": "napi build --platform --features napi",
+    "prepare": "sh scripts/build-binding.sh"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.0.0"

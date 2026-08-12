@@ -13,6 +13,7 @@ export {
   UIDefaults,
   compound,
   defineComponent,
+  type ComponentProps,
   type DefineComponentConfig,
   type Layout,
   type LayoutStable,

@@ -35,6 +35,15 @@ export type RecipeConfig = {
   /** Computed by the logic. Never set by the caller. Mirrored to `data-*`. */
   state?: Record<string, Variant>;
   /**
+   * The value each axis takes when nothing else sets it — the lowest layer of
+   * the cascade.
+   *
+   * Here rather than in a file of its own: a default is a fact about the design
+   * vocabulary, so it belongs with the axis it defaults, and splitting it out
+   * meant two files to open to answer one question.
+   */
+  defaults?: Record<string, unknown>;
+  /**
    * Set only when this recipe's own classes are Tailwind utilities, which
    * selects `twMerge` for the consumer's trailing `class` instead of `cx`.
    * With Tailwind the tail can contradict the recipe and only `twMerge`

@@ -94,8 +94,15 @@ export type DefineComponentConfig<R extends Recipe> = {
   /** Receives behaviour props only, never presentation. */
   setup?: (behaviour: Record<string, unknown>) => Record<string, unknown>;
   layout?: Layout<R>;
-  /** Wraps the layout. Assembly, so it does not belong in the markup. */
-  provide?: Context<unknown>;
+  /**
+   * Wraps the layout. Assembly, so it does not belong in the markup.
+   *
+   * `Context<any>` because `Context` is invariant in its value: a
+   * `Context<AlertValue | undefined>` is not assignable to `Context<unknown>`,
+   * so narrowing this would reject every real context a component provides.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: see above
+  provide?: Context<any>;
 };
 
 /**
@@ -105,9 +112,20 @@ export type DefineComponentConfig<R extends Recipe> = {
  * import, so a hand-written call works identically; the generator exists to
  * stop anyone typing it, not to do anything they could not.
  */
-export function defineComponent<R extends Recipe>(
+/**
+ * The props a component built from `R` accepts.
+ *
+ * `Behaviour` is supplied by the caller because nothing in the recipe knows
+ * about it: those props are the ones neither presentation nor plain HTML.
+ */
+export type ComponentProps<R extends Recipe, Behaviour = unknown> = PropsOf<R> &
+  StateOf<R> &
+  Behaviour &
+  JSX.HTMLAttributes<HTMLElement>;
+
+export function defineComponent<R extends Recipe, Behaviour = unknown>(
   config: DefineComponentConfig<R>,
-): (props: Record<string, unknown>) => JSX.Element {
+): (props: ComponentProps<R, Behaviour>) => JSX.Element {
   const { recipe, setup, layout, provide } = config;
   const componentName = config.name ?? recipe.config.component;
   const element = config.element ?? recipe.config.element ?? "div";
@@ -121,7 +139,11 @@ export function defineComponent<R extends Recipe>(
 
   const compiled = recipe.config._layouts;
 
-  return function LayoutComponent(props) {
+  return function LayoutComponent(outer: ComponentProps<R, Behaviour>) {
+    // The public signature is typed; the body works in terms of a plain record
+    // because every split here is by name at runtime, and threading the generic
+    // through `splitProps` buys nothing but noise.
+    const props = outer as unknown as Record<string, unknown>;
     const subtree = useContext(UIDefaultsContext);
     const instance = __nextInstance();
     /**
@@ -173,7 +195,10 @@ export function defineComponent<R extends Recipe>(
       return (
         subtree?.[componentName]?.[key] ??
         globalDefaultsFor(componentName)?.[key] ??
-        config.defaults?.[key]
+        config.defaults?.[key] ??
+        // The recipe's own, so a default can live beside the axis it defaults
+        // rather than in a file of its own.
+        recipe.config.defaults?.[key]
       );
     };
 
