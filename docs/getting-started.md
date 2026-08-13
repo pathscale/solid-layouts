@@ -22,42 +22,33 @@ normal Solid/Rsbuild output F
 
 For Pathscale:
 
-- The full authored migration is [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221), branch `feat/icon-layout-port`.
+- The full authored migration is the merged [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221), published as `@pathscale/ui@1.4.0`.
 - The working compiler fixture is [`Test-UI/`](../Test-UI) in this repository. It contains Icon and Button so every generated file remains easy to inspect while the application proof exercises real component markup changes.
-- The current real application consumer is [Chuzz PR #7](https://github.com/pathscale/chuzz/pull/7).
+- The current real application consumer is [Chuzz PR #9](https://github.com/pathscale/chuzz/pull/9).
 
-The full PR #221 tree is not yet the input to the working B pipeline. Do not point an application at that raw source and do not copy its generated-looking files into an application. First make it a producer, run B, and consume only C.
+Do not point an application at raw UI source and do not copy generated files into an application. The UI release runs B and publishes C; applications consume only that package.
 
 ## Current availability
 
-`solid-layouts` and `solid-layouts-oxc` are not published on npm yet. There are therefore two configurations in this guide:
+The complete public package set is live:
 
-1. The current checkout configuration, which uses explicit local paths and is runnable now.
-2. The final package configuration, which is the intended public API after the packages and C are published.
+- `solid-layouts@0.1.2`: shared runtime
+- `solid-layouts-oxc@0.1.2`: native compiler hosts, CLI, and linter
+- `rsbuild-plugin-solid-layouts@0.1.2`: stable Rsbuild facade
+- `@pathscale/ui@1.4.0`: compiled Layout UI package C
 
-The compiler behavior is the same. The path overrides only replace npm package resolution during hands-on development.
+Use registry package resolution for normal work. Object-shaped layout sources and an explicit runtime path remain development-only overrides for compiler fixtures.
 
-## Directory layout for the current proof
+## Install the application dependencies
 
-Keep the repositories as siblings because Chuzz PR #7 intentionally uses relative checkout paths:
-
-```text
-workspace/
-  solid-layouts/
-  chuzz/
-  UI/                 optional; only needed to inspect the full migration
-```
-
-Clone the compiler/runtime and, optionally, the full authored UI:
+An application needs the compiled UI, the small runtime, and the build plugin:
 
 ```sh
-mkdir workspace
-cd workspace
-git clone https://github.com/pathscale/solid-layouts.git
-git clone --branch feat/icon-layout-port https://github.com/pathscale/ui.git UI
+bun add @pathscale/ui solid-layouts
+bun add -d rsbuild-plugin-solid-layouts
 ```
 
-`UI/` is role A for the eventual full library. The runnable example below uses `solid-layouts/Test-UI` as a controlled four-component A.
+The application does not install a local UI checkout or configure a runtime path. `solid-layouts-oxc` arrives through the plugin and selects the native package for the host platform.
 
 ## Producer: author components as A
 
@@ -188,13 +179,10 @@ This file is explicit because B cannot safely guess which internal recipe/Layout
 
 ### 4. Build B and produce C
 
-On a clean checkout, build the native binding using the system Rust toolchain, then run the library compiler:
+Install the published compiler and run the library pass:
 
 ```sh
-cd workspace/solid-layouts/packages/solid-layouts-oxc
-./scripts/build-binding.sh
-
-cd ../../Test-UI
+bun add -d solid-layouts-oxc
 bun run build:layouts
 ```
 
@@ -285,7 +273,7 @@ After `solid-layouts`, `solid-layouts-oxc`, and the compiled `@pathscale/ui` C p
 import { defineConfig } from "@rsbuild/core";
 import { pluginBabel } from "@rsbuild/plugin-babel";
 import { pluginSolid } from "@rsbuild/plugin-solid";
-import { pluginSolidLayoutsApplication } from "solid-layouts-oxc/application";
+import { pluginSolidLayoutsApplication } from "rsbuild-plugin-solid-layouts";
 
 export default defineConfig({
   plugins: [
@@ -310,9 +298,9 @@ At setup E:
 6. Rewrites validated Layout-package imports to C's resolved public entry.
 7. Resolves `solid-layouts/application-boundary` to the shared runtime.
 
-### Current local-checkout configuration
+### Local compiler-fixture override
 
-Before publication, provide the package identity plus C's directory and the runtime path explicitly:
+Compiler fixtures may provide the package identity plus C's directory and runtime explicitly:
 
 ```ts
 import { pluginSolidLayoutsApplication } from "../../../../solid-layouts/packages/solid-layouts-oxc/application.js";
@@ -328,31 +316,21 @@ pluginSolidLayoutsApplication({
 })
 ```
 
-TypeScript needs a path for the local C types, and the bundler needs the local runtime path. The bundler does not need a C alias: E rewrites `@pathscale/test-ui` to the validated absolute C entry. Chuzz PR #7 is the exact working example. The object-shaped Layout source and `runtime` option are checkout overrides, not a second compiler mode.
+TypeScript needs a path for the local C types, and the bundler needs the local runtime path. The bundler does not need a C alias: E rewrites `@pathscale/test-ui` to the validated absolute C entry. The object-shaped Layout source and `runtime` option are checkout overrides, not a second compiler mode and not the Chuzz configuration.
 
-## Run the current Chuzz proof
+## Inspect the Chuzz consumer
 
-With `solid-layouts` and `chuzz` as sibling directories:
+Chuzz PR #9 uses only published package resolution:
 
 ```sh
-cd workspace
-git clone https://github.com/pathscale/solid-layouts.git
 git clone https://github.com/pathscale/chuzz.git
-
-git -C chuzz fetch origin pull/7/head:solid-layouts-icon
-git -C chuzz switch solid-layouts-icon
-
-cd solid-layouts/packages/solid-layouts-oxc
-./scripts/build-binding.sh
-cd ../../Test-UI
-bun run build:layouts
-
-cd ../../chuzz/apps/chuzz/frontend
+git -C chuzz fetch origin pull/9/head:solid-layouts-ui
+git -C chuzz switch solid-layouts-ui
+cd chuzz/apps/chuzz/frontend
 bun install --frozen-lockfile
-bun run build
 ```
 
-Chuzz imports Icon, Button, Flex, and Chip from `@pathscale/test-ui`. The Button migration replaces native controls across the title bar, toolbar, inspector, settings, theme picker, and application shell. Stable presentation is expressed through Layout parameters; application CSS remains only for component relationships or application-specific structures the reusable component cannot own.
+Its `rsbuild.config.ts` contains only `layouts: ["@pathscale/ui"]`. Chuzz imports the published Button, Flex, Tabs, Disclosure, Modal, Surface, Text, ColorSwatch, and other components from `@pathscale/ui`. The application keeps CSS only for application-specific chrome structure and component relationships that the reusable recipes do not own.
 
 ## Expected failures
 

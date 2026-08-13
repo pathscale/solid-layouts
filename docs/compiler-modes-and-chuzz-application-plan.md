@@ -4,7 +4,7 @@ For a command-by-command producer and consumer setup, start with [Getting starte
 
 ## Status
 
-Both compiler passes now exist for the four-component proof. The library compiler produces the local Test-UI bundle from the authored Icon, Button, Flex, and Chip Layouts, and the application compiler consumes that bundle from Chuzz before the normal Solid transform. This is the working slice, not a claim that the complete UI library has been ported.
+Both compiler passes are live. The four-component Test-UI fixture remains the small conformance proof; the full PathScale UI migration was compiled and published as `@pathscale/ui@1.4.0`, and Chuzz PR #9 consumes it before the normal Solid transform.
 
 ```text
 A = user-authored Layout UI source
@@ -18,7 +18,7 @@ A + B     -> C
 C + D + E -> F
 ```
 
-`Test-UI` is the controlled producer fixture for A, B, and C. Chuzz is the first real consumer D. Another toy application is unnecessary.
+`Test-UI` is the controlled producer fixture for A, B, and C. PathScale UI is the production A→C pipeline, and Chuzz is the first real consumer D. Another toy application is unnecessary.
 
 ## Mode is explicit
 
@@ -209,36 +209,23 @@ shared parser, diagnostics and source utilities
 
 The application host builds the exact export index from C once at plugin setup. The native matcher does not treat every export from a configured module as a Layout.
 
-## Why Chuzz is the first consumer
+## Chuzz as the first consumer
 
 Chuzz is a real Rsbuild/Solid application. It already consumes `@pathscale/ui`, renders Icon in multiple locations, disables code splitting, and is intended to expose both bundle cost and per-instance cost under Boa.
 
-The integration changes Icon and Button because the current C fixture contains both. Existing `@pathscale/ui` remains in place for Flex, Chip, motion, CSS, and color types.
-
-Conceptually, application source changes from:
-
-```ts
-import { Flex, Icon } from "@pathscale/ui";
-```
-
-to:
-
-```ts
-import { Flex } from "@pathscale/ui";
-import { Button, Icon } from "@pathscale/test-ui";
-```
+The first proof changed Icon and Button against the small Test-UI C fixture. The completed consumer migration in Chuzz PR #9 imports the full published `@pathscale/ui@1.4.0` C package.
 
 This is not hand-generated component code. Chuzz imports the compiler-produced C package. The authored Layout, generated Layout TSX, compiled recipe table, and manifest remain owned by the producer/compiler pipeline.
 
 In a normally installed application, Chuzz selects application mode explicitly in `rsbuild.config.ts`:
 
 ```ts
-import { pluginSolidLayoutsApplication } from "solid-layouts-oxc/application";
+import { pluginSolidLayoutsApplication } from "rsbuild-plugin-solid-layouts";
 
 export default defineConfig({
   plugins: [
     pluginSolidLayoutsApplication({
-      layouts: ["@pathscale/test-ui"],
+      layouts: ["@pathscale/ui"],
     }),
     pluginBabel(/* existing configuration */),
     pluginSolid(),
@@ -248,7 +235,7 @@ export default defineConfig({
 
 The application pass must see TSX before the Solid JSX transform lowers component and prop information.
 
-For the current hands-on test, Chuzz uses the same API with `{ module, root }` and an explicit runtime path. Those two path overrides point at the system/local checkouts without installing anything:
+Compiler fixtures can use the same API with `{ module, root }` and an explicit runtime path:
 
 ```ts
 pluginSolidLayoutsApplication({
@@ -260,7 +247,7 @@ pluginSolidLayoutsApplication({
 })
 ```
 
-The published path remains `layouts: ["@pathscale/test-ui"]`; package resolution then locates C from Chuzz's dependency graph.
+Chuzz does not use those overrides. Its published configuration is `layouts: ["@pathscale/ui"]`; normal package resolution locates C and the shared runtime from its dependency graph.
 
 ## First end-to-end proof
 
@@ -275,7 +262,7 @@ solid-layouts library compiler B
        v
 local npm-ready package C
        |
-       +---------- Chuzz imports Icon and Button
+       +---------- Chuzz imports the published UI components
                           |
                           v
               application compiler E
@@ -294,7 +281,7 @@ local npm-ready package C
 
 The implemented test matrix is:
 
-1. Valid local C package accepts and rewrites both Icon and Button imports.
+1. A valid C package accepts and rewrites manifest-backed component imports.
 2. Importing an export absent from the manifest fails.
 3. A configured package without the `solidLayouts` discovery field fails.
 4. A corrupt or unsupported manifest fails.
@@ -317,10 +304,12 @@ The completed slice is:
 7. Added the unresolved compiler boundary to generated C entries.
 8. Added positive and hard-failure compiler tests.
 9. Made E resolve C's public entry and rewrite validated application imports instead of relying on a hand-written bundler alias.
-10. Pointed Chuzz at the local compiler-produced C directory and local runtime, without installing packages.
-11. Redirected Icon and Button imports in Chuzz to C and replaced the raw title-bar and inspector buttons with the compiled component.
+10. Published the runtime, native compiler, and Rsbuild plugin through npm Trusted Publishing.
+11. Compiled and published the full PathScale UI migration as `@pathscale/ui@1.4.0`.
+12. Pointed Chuzz PR #9 exclusively at registry packages and removed its local UI, compiler, runtime, and TypeScript aliases.
+13. Replaced raw browser-chrome elements with the published Button, Flex, Tabs, Disclosure, Modal, Surface, Text, ColorSwatch, and related components.
 
-The next work is manual Chuzz behavior review, settling the published package names/API types, publishing or installing a packed C through the normal dependency graph, expanding one component per commit, and measuring bundle delta and per-instance runtime cost in the target Boa environment.
+The remaining work is manual Chuzz behavior review in the target shell, converting app-specific chrome geometry into application-owned semantic recipes where it is reused, and measuring bundle delta and per-instance runtime cost in Boa.
 
 ## Runtime cost
 
