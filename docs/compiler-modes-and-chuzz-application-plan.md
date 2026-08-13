@@ -4,7 +4,7 @@ For a command-by-command producer and consumer setup, start with [Getting starte
 
 ## Status
 
-Both compiler passes now exist for the two-component proof. The library compiler produces the local Test-UI bundle from the authored Icon and Button Layouts, and the application compiler consumes that bundle from Chuzz before the normal Solid transform. This is the working slice, not a claim that the complete UI library has been ported.
+Both compiler passes now exist for the four-component proof. The library compiler produces the local Test-UI bundle from the authored Icon, Button, Flex, and Chip Layouts, and the application compiler consumes that bundle from Chuzz before the normal Solid transform. This is the working slice, not a claim that the complete UI library has been ported.
 
 ```text
 A = user-authored Layout UI source

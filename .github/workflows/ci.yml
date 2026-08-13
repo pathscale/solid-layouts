@@ -120,7 +120,7 @@ jobs:
       - name: Test the application compiler host
         run: bun run test:application
 
-      - name: Regenerate the two-component package fixture
+      - name: Regenerate the four-component package fixture
         working-directory: Test-UI
         run: bun ../packages/solid-layouts-oxc/bin/solid-layouts-library.js
 

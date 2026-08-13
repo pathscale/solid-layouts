@@ -55,8 +55,7 @@
     "build": "napi build --platform --release --features napi",
     "build:debug": "napi build --platform --features napi",
     "test:library": "bun test library.test.js",
-    "test:application": "bun test application.test.js",
-    "prepare": "sh scripts/build-binding.sh"
+    "test:application": "bun test application.test.js"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.0.0"

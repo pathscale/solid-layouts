@@ -118,7 +118,7 @@ Yes, all three layers have tests:
 | Library host | 3 package-production tests | `cd packages/solid-layouts-oxc && bun run test:library` |
 | Application host | 9 package-resolution, source-rewrite, and hard-failure tests | `cd packages/solid-layouts-oxc && bun run test:application` |
 
-CI also runs `cargo fmt`, Clippy with warnings denied, regenerates the compiled parity fixture, rebuilds the two-component C fixture, and fails if generated output is stale. The JavaScript host tests require the local native binding:
+CI also runs `cargo fmt`, Clippy with warnings denied, regenerates the compiled parity fixture, rebuilds the four-component C fixture, and fails if generated output is stale. The JavaScript host tests require the local native binding:
 
 ```sh
 cd packages/solid-layouts-oxc
@@ -130,7 +130,7 @@ bun run test:application
 ## Repository layout
 
 ```text
-Test-UI/                    complete two-component A+B->C fixture
+Test-UI/                    complete four-component A+B->C fixture
 packages/solid-layouts/     shared Solid runtime
 packages/solid-layouts-oxc/ both compiler hosts and the OXC transform
   application.js           application compiler E

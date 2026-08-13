@@ -49,7 +49,7 @@ test("resolves an exact component index from C and accepts its public export", (
   expect(application.layoutSources).toEqual([
     {
       module: "@pathscale/test-ui",
-      exports: ["Button", "Icon"],
+      exports: ["Button", "Chip", "Flex", "Icon"],
       resolved: resolve(__dirname, "../../Test-UI/bundle/index.ts"),
     },
   ]);
