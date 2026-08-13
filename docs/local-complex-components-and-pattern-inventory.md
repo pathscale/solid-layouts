@@ -2,13 +2,13 @@
 
 The next migration work is driven by real application evidence, not by adding arbitrary presentation props to `@pathscale/ui`.
 
-The priority corpus is:
+The first deep-review corpus is:
 
 1. Chuzz, the first full Solid Layouts consumer and the smallest complete desktop chrome.
 2. nofilter.io, the largest and most structurally complex UI in the corpus.
 3. AgencyZero, especially its newly migrated Solid workspace, tabs, panels, and stateful controls.
 
-The remaining applications under `~/code` are supporting evidence. A pattern found only in an unrelated application cannot override the needs of the priority corpus, but repetition across the wider set can establish that a primitive is generally useful.
+Every application under `~/code` is product evidence. Chuzz, nofilter.io, and AgencyZero receive the deepest initial review because together they exercise desktop chrome, complex responsive UI, and a large newly migrated Solid workspace. The other applications remain first-class inputs: they can establish shared form, authentication, table, card, spacing, and typography contracts that the first three do not exercise, and a strong pattern in any one product can justify a local component or a candidate for validation elsewhere.
 
 ## Classification boundary
 
