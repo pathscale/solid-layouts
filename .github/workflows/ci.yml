@@ -32,6 +32,9 @@ jobs:
 
       - run: bunx tsc --noEmit
 
+      - name: Build and load the package entry
+        run: bun run build && bun -e 'await import("./dist/index.js")'
+
   parity:
     name: parity (compiled == interpreted)
     runs-on: ubicloud-standard-2

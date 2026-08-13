@@ -1,6 +1,6 @@
 {
   "name": "solid-layouts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Logic in a .ts file, markup in a .layout.tsx file, presentation declared at the call site",
   "license": "MIT",
   "type": "module",
@@ -29,7 +29,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts src/recipe.ts src/cx.ts --outdir dist --target browser --format esm --external solid-js --external 'solid-js/*' && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && bun build src/index.ts src/recipe.ts src/cx.ts --outdir dist --target browser --format esm --splitting --external solid-js --external 'solid-js/*' && tsc -p tsconfig.build.json",
     "prepack": "bun run build",
     "test": "bun test --conditions=browser",
     "typecheck": "tsc --noEmit"
