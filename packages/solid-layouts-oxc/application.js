@@ -5,7 +5,7 @@ const { createRequire } = require("node:module");
 const { dirname, relative, resolve, sep } = require("node:path");
 const { transform } = require("./index.js");
 
-const FORMAT = "solid-layouts-library-v1";
+const FORMAT = "solid-layouts-library-v2";
 const APPLICATION_BOUNDARY = "solid-layouts/application-boundary";
 
 function readJson(path, label) {
@@ -54,6 +54,10 @@ function publicEntryFrom(packageJson) {
 }
 
 function validateComponent(module, packageRoot, name, component) {
+  if (component?.kind === "embedded") return;
+  if (component?.kind !== "generated") {
+    throw new Error(`${module}: component ${name} has unsupported manifest kind ${JSON.stringify(component?.kind)}`);
+  }
   for (const key of ["entry", "recipe", "recipeExport", "layout", "layoutExport"]) {
     if (!component?.[key]) {
       throw new Error(`${module}: component ${name} is missing manifest field ${key}`);

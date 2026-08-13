@@ -13,6 +13,7 @@
 //! output is the valid TSX that a Layout UI package carries forward.
 
 pub mod compile_recipe;
+pub mod linter;
 pub mod match_layouts;
 
 use layouts_common::{
@@ -247,10 +248,22 @@ fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundL
             continue;
         };
 
+        let uses_slots = unresolved.get("slot").is_some_and(|references| {
+            references.iter().any(|reference_id| {
+                let reference = semantic.scoping().get_reference(*reference_id);
+                let span = semantic.reference_span(reference);
+                reference.is_value() && span.start >= body_span.start && span.end <= body_span.end
+            })
+        });
+
         edits.push(SourceEdit::Replace {
             start: parameters_span.start as usize,
             end: parameters_span.end as usize,
-            text: "({ slot, children }, p)".to_owned(),
+            text: if uses_slots {
+                "({ slot, children }, p)".to_owned()
+            } else {
+                "p".to_owned()
+            },
         });
 
         for (name, references) in unresolved {
@@ -264,11 +277,12 @@ fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundL
                     continue;
                 }
 
-                let replacement = match name.as_str() {
-                    "slot" | "children" | "p" => continue,
-                    "local" | "props" | "rawProps" => "p".to_owned(),
-                    name if is_runtime_global(name) => continue,
-                    name => format!("p.{name}"),
+                let replacement = match (uses_slots, name.as_str()) {
+                    (_, "local" | "props" | "rawProps") => "p".to_owned(),
+                    (false, _) => continue,
+                    (true, "slot" | "children" | "p") => continue,
+                    (true, name) if is_runtime_global(name) => continue,
+                    (true, name) => format!("p.{name}"),
                 };
                 edits.push(SourceEdit::Replace {
                     start: span.start as usize,
@@ -536,6 +550,34 @@ const Icon: Layout<typeof icon, IconProps> = () => {
             parsed.diagnostics.is_empty(),
             "compiled Layout must be valid TSX: {:?}\n{}",
             parsed.diagnostics,
+            result.code
+        );
+    }
+
+    #[test]
+    fn compiles_a_legacy_component_layout_with_one_props_parameter() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { button } from "./Button.recipe";
+const Button: Layout<typeof button, ButtonProps> = () => {
+  const disabled = Boolean(props.disabled);
+  return <button disabled={disabled}>{props.children}</button>;
+};
+"#;
+        let result = transform(
+            source,
+            &TransformOptions::new("Button.layout.tsx", CompilerMode::Library),
+        );
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.code.contains("= p =>"), "{}", result.code);
+        assert!(
+            result.code.contains("Boolean(p.disabled)"),
+            "{}",
+            result.code
+        );
+        assert!(result.code.contains("{p.children}"), "{}", result.code);
+        assert!(
+            !result.code.contains("{ slot, children }"),
+            "{}",
             result.code
         );
     }

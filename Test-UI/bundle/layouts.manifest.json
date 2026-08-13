@@ -1,9 +1,10 @@
 {
-  "format": "solid-layouts-library-v1",
+  "format": "solid-layouts-library-v2",
   "package": "@pathscale/test-ui",
   "version": "0.1.0",
   "components": {
     "Icon": {
+      "kind": "generated",
       "entry": "./index.ts",
       "recipe": "./components/icon/Icon.recipe.ts",
       "recipeExport": "icon",
@@ -11,6 +12,7 @@
       "layoutExport": "IconLayout"
     },
     "Button": {
+      "kind": "generated",
       "entry": "./index.ts",
       "recipe": "./components/button/Button.recipe.ts",
       "recipeExport": "button",
@@ -18,6 +20,7 @@
       "layoutExport": "ButtonLayout"
     },
     "Flex": {
+      "kind": "generated",
       "entry": "./index.ts",
       "recipe": "./components/flex/Flex.recipe.ts",
       "recipeExport": "flex",
@@ -25,6 +28,7 @@
       "layoutExport": "FlexLayout"
     },
     "Chip": {
+      "kind": "generated",
       "entry": "./index.ts",
       "recipe": "./components/chip/Chip.recipe.ts",
       "recipeExport": "chip",

@@ -26,8 +26,29 @@ export type TransformResult = {
   failed: boolean;
 };
 
+export type ProjectFile = {
+  filename: string;
+  source: string;
+};
+
+export type ProjectDiagnostic = Diagnostic & {
+  filename: string;
+  rule: string;
+};
+
+export type ApplicationSource = {
+  module: string;
+  exports: string[];
+};
+
 export declare function transform(
   source: string,
   filename: string,
   options: TransformOptions,
 ): TransformResult;
+
+export declare function lintProject(files: ProjectFile[]): ProjectDiagnostic[];
+export declare function lintApplication(
+  files: ProjectFile[],
+  sources: ApplicationSource[],
+): ProjectDiagnostic[];

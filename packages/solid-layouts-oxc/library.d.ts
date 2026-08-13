@@ -1,22 +1,42 @@
 export type SolidLayoutsLibraryOptions = {
   root?: string;
   config?: string;
+  check?: boolean;
+  updateBaseline?: boolean;
+};
+
+export type LibraryDiagnostic = {
+  filename: string;
+  rule: string;
+  severity: "warning" | "error";
+  message: string;
+  line: number;
+  column: number;
+  baseline?: boolean;
 };
 
 export type LayoutManifest = {
-  format: "solid-layouts-library-v1";
+  format: "solid-layouts-library-v2";
   package: string;
   version: string;
   components: Record<string, {
-    entry: string;
-    recipe: string;
-    recipeExport: string;
-    layout: string;
-    layoutExport: string;
+    kind: "generated" | "embedded";
+    entry?: string;
+    recipe?: string;
+    recipeExport?: string;
+    layout?: string;
+    layoutExport?: string;
   }>;
 };
 
-export declare const FORMAT: "solid-layouts-library-v1";
+export declare const FORMAT: "solid-layouts-library-v2";
+export declare function emitSourceManifest(
+  options?: SolidLayoutsLibraryOptions,
+): {
+  root: string;
+  outputRoot: string;
+  manifest: LayoutManifest;
+};
 export declare function compileLibrary(
   options?: SolidLayoutsLibraryOptions,
 ): {
@@ -24,6 +44,23 @@ export declare function compileLibrary(
   sourceRoot: string;
   outputRoot: string;
   manifest: LayoutManifest;
+};
+export declare function generateLibrarySource(
+  options?: SolidLayoutsLibraryOptions,
+): {
+  root: string;
+  sourceRoot: string;
+  diagnostics: LibraryDiagnostic[];
+  failed: boolean;
+  changed: number;
+};
+export declare function lintLibrary(
+  options?: SolidLayoutsLibraryOptions,
+): {
+  root: string;
+  sourceRoot: string;
+  diagnostics: LibraryDiagnostic[];
+  failed: boolean;
 };
 export declare function pluginSolidLayoutsLibrary(
   options?: SolidLayoutsLibraryOptions,

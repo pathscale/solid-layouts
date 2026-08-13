@@ -12,6 +12,7 @@ JSX names are case-sensitive. `<button>` is a native HTML element and bypasses L
 - [Why the library compiler produces an intermediate npm package](./docs/solid-layouts-library-compiler-explained.md)
 - [Compiler modes, public entry points, failures, and the Chuzz integration](./docs/compiler-modes-and-chuzz-application-plan.md)
 - [Porting from Vue](./docs/porting-from-vue.md)
+- [Layout linting, porting reports, baselines, and user-owned recipes](./docs/linting-and-porting.md)
 - [Original design document](https://github.com/pathscale/ui/blob/layouts/docs/layouts.md)
 
 ## The pipeline
@@ -56,7 +57,7 @@ An application must never alias imports to raw `UI/src`. The application consume
 
 ## Run the complete four-component proof
 
-The packages are not published on npm yet. The current reproducible path uses this checkout and the system Bun and Rust toolchains:
+Until the packages are published on npm, the reproducible path uses this checkout and the system Bun and Rust toolchains:
 
 ```sh
 git clone https://github.com/pathscale/solid-layouts.git
@@ -106,6 +107,8 @@ import {
 ```
 
 The equivalent command-line entry points are `solid-layouts-library` and `solid-layouts-application`. The hosts always select `library` or `application` mode explicitly; mode is never inferred from a filename or package.
+
+The shared OXC linter is `solid-layouts-lint`. Use normal mode for library contracts and `solid-layouts-lint --porting --layouts @pathscale/ui` for a warning-only application migration inventory.
 
 ## Tests
 

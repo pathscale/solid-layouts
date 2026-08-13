@@ -10,7 +10,7 @@ const {
 } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
-const { compileLibrary } = require("./library.js");
+const { compileLibrary, lintLibrary } = require("./library.js");
 
 const temporary = [];
 
@@ -70,6 +70,14 @@ test("builds valid generated Layout source and a package manifest", () => {
   expect(result.manifest.components.Button.layout).toBe(
     "./components/button/Button.generated.tsx",
   );
+});
+
+test("lints the library with the native project checker", () => {
+  const root = fixture();
+  const result = lintLibrary({ root });
+  expect(result.failed).toBe(false);
+  expect(result.diagnostics).toHaveLength(1);
+  expect(result.diagnostics[0].rule).toBe("manual-classes");
 });
 
 test("fails when a rendered slot is absent from the recipe", () => {

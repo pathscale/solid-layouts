@@ -126,10 +126,11 @@ The compiled recipe contains `_layouts`, and B generates `index.ts` with the `de
 
 ```json
 {
-  "format": "solid-layouts-library-v1",
+  "format": "solid-layouts-library-v2",
   "package": "@pathscale/test-ui",
   "components": {
     "Icon": {
+      "kind": "generated",
       "entry": "./index.ts",
       "recipe": "./components/icon/Icon.recipe.ts",
       "recipeExport": "icon",

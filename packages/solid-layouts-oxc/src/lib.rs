@@ -7,6 +7,9 @@
 pub use layouts_common::{
     CompilerMode, Diagnostic, FileKind, LayoutSource, Severity, TransformOptions, TransformResult,
 };
+pub use layouts_transform::linter::{
+    ApplicationSource, ProjectDiagnostic, ProjectFile, lint_application, lint_project,
+};
 pub use layouts_transform::{FoundLayout, find_layouts, print, transform};
 
 #[cfg(feature = "napi")]
@@ -57,6 +60,90 @@ mod binding {
         pub module: String,
         pub exports: Vec<String>,
         pub resolved: Option<String>,
+    }
+
+    #[napi(object)]
+    pub struct JsProjectFile {
+        pub filename: String,
+        pub source: String,
+    }
+
+    #[napi(object)]
+    pub struct JsProjectDiagnostic {
+        pub filename: String,
+        pub rule: String,
+        pub severity: String,
+        pub message: String,
+        pub line: u32,
+        pub column: u32,
+    }
+
+    #[napi(object)]
+    pub struct JsApplicationSource {
+        pub module: String,
+        pub exports: Vec<String>,
+    }
+
+    #[napi]
+    pub fn lint_project(files: Vec<JsProjectFile>) -> Vec<JsProjectDiagnostic> {
+        let files: Vec<layouts_transform::linter::ProjectFile> = files
+            .into_iter()
+            .map(|file| layouts_transform::linter::ProjectFile {
+                filename: file.filename,
+                source: file.source,
+            })
+            .collect();
+        layouts_transform::linter::lint_project(&files)
+            .into_iter()
+            .map(|item| {
+                let lines = layouts_common::LineIndex::new(&item.source);
+                let at = lines.position(&item.source, item.diagnostic.start);
+                JsProjectDiagnostic {
+                    filename: item.filename,
+                    rule: item.rule.to_owned(),
+                    severity: format!("{:?}", item.diagnostic.severity).to_lowercase(),
+                    message: item.diagnostic.message,
+                    line: at.line,
+                    column: at.column,
+                }
+            })
+            .collect()
+    }
+
+    #[napi]
+    pub fn lint_application(
+        files: Vec<JsProjectFile>,
+        sources: Vec<JsApplicationSource>,
+    ) -> Vec<JsProjectDiagnostic> {
+        let files: Vec<layouts_transform::linter::ProjectFile> = files
+            .into_iter()
+            .map(|file| layouts_transform::linter::ProjectFile {
+                filename: file.filename,
+                source: file.source,
+            })
+            .collect();
+        let sources: Vec<layouts_transform::linter::ApplicationSource> = sources
+            .into_iter()
+            .map(|source| layouts_transform::linter::ApplicationSource {
+                module: source.module,
+                exports: source.exports.into_iter().collect(),
+            })
+            .collect();
+        layouts_transform::linter::lint_application(&files, &sources)
+            .into_iter()
+            .map(|item| {
+                let lines = layouts_common::LineIndex::new(&item.source);
+                let at = lines.position(&item.source, item.diagnostic.start);
+                JsProjectDiagnostic {
+                    filename: item.filename,
+                    rule: item.rule.to_owned(),
+                    severity: format!("{:?}", item.diagnostic.severity).to_lowercase(),
+                    message: item.diagnostic.message,
+                    line: at.line,
+                    column: at.column,
+                }
+            })
+            .collect()
     }
 
     #[napi]

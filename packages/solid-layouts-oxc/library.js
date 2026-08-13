@@ -11,9 +11,9 @@ const {
   writeFileSync,
 } = require("node:fs");
 const { dirname, extname, relative, resolve, sep } = require("node:path");
-const { transform } = require("./index.js");
+const { lintProject, transform } = require("./index.js");
 
-const FORMAT = "solid-layouts-library-v1";
+const FORMAT = "solid-layouts-library-v2";
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -52,6 +52,121 @@ function compileFile(source, filename) {
   const result = transform(source, filename, { mode: "library" });
   if (result.failed) throw new Error(formatDiagnostics(filename, result.diagnostics));
   return result.code;
+}
+
+function lintLibrary(options = {}) {
+  const root = resolve(options.root || process.cwd());
+  const configPath = resolve(root, options.config || "layouts.library.json");
+  const config = readJson(configPath);
+  const sourceRoot = resolve(root, config.source || "src");
+  assertInside(root, sourceRoot, "source directory");
+  const files = filesBelow(sourceRoot)
+    .filter((filename) => /\.(?:ts|tsx|js|jsx)$/.test(filename))
+    .map((filename) => ({ filename, source: readFileSync(filename, "utf8") }));
+  let diagnostics = lintProject(files);
+  const fingerprint = (item) =>
+    `${relative(root, item.filename).split(sep).join("/")}:${item.severity}:${item.rule}:${item.message}`;
+  const baselinePath = config.lint?.baseline
+    ? resolve(root, config.lint.baseline)
+    : undefined;
+  const current = diagnostics.map(fingerprint).sort();
+  if (options.updateBaseline) {
+    if (!baselinePath) throw new Error(`${configPath} has no lint.baseline path`);
+    writeJson(baselinePath, { format: "solid-layouts-lint-baseline-v1", diagnostics: current });
+  }
+  if (baselinePath && existsSync(baselinePath)) {
+    const baseline = readJson(baselinePath);
+    if (baseline.format !== "solid-layouts-lint-baseline-v1" || !Array.isArray(baseline.diagnostics)) {
+      throw new Error(`invalid Layout lint baseline: ${baselinePath}`);
+    }
+    const allowed = new Map();
+    for (const item of baseline.diagnostics) allowed.set(item, (allowed.get(item) || 0) + 1);
+    diagnostics = diagnostics.map((item) => {
+      const key = fingerprint(item);
+      const remaining = allowed.get(key) || 0;
+      if (remaining === 0) return item;
+      allowed.set(key, remaining - 1);
+      return { ...item, baseline: true };
+    });
+    const stale = [...allowed.values()].some((count) => count > 0);
+    if (stale && !options.updateBaseline) {
+      diagnostics.push({
+        filename: baselinePath,
+        rule: "baseline-stale",
+        severity: "error",
+        message: "Layout lint debt was removed; update the baseline so it cannot return unnoticed",
+        line: 1,
+        column: 1,
+      });
+    }
+  }
+  return {
+    root,
+    sourceRoot,
+    diagnostics,
+    failed: diagnostics.some((item) =>
+      !item.baseline &&
+      (item.severity === "error" || (config.lint?.warningsAsErrors && item.severity === "warning")),
+    ),
+  };
+}
+
+function generateLibrarySource(options = {}) {
+  const root = resolve(options.root || process.cwd());
+  const configPath = resolve(root, options.config || "layouts.library.json");
+  const config = readJson(configPath);
+  if (config.mode !== "source") {
+    throw new Error(`${configPath} must set mode to "source" for adjacent generation`);
+  }
+  if (!Array.isArray(config.exports) || config.exports.length === 0) {
+    throw new Error(`${configPath} must declare its public Layout exports`);
+  }
+  const lint = lintLibrary({ ...options, root });
+  if (lint.failed) {
+    throw new Error(lint.diagnostics.map((item) =>
+      `${item.filename}:${item.line}:${item.column}: ${item.severity}: ${item.message}`,
+    ).join("\n"));
+  }
+
+  let changed = 0;
+  for (const input of filesBelow(lint.sourceRoot)) {
+    if (!/\.layout\.(tsx|jsx)$/.test(input)) continue;
+    const output = input.replace(/\.layout\.(tsx|jsx)$/, ".generated.$1");
+    const compiled = `${compileFile(readFileSync(input, "utf8"), input).trimEnd()}\n`;
+    const current = existsSync(output) ? readFileSync(output, "utf8") : "";
+    if (current === compiled) continue;
+    if (options.check) {
+      throw new Error(`${output} is stale; run solid-layouts-library --generate`);
+    }
+    writeFileSync(output, compiled);
+    changed += 1;
+  }
+  return { ...lint, changed };
+}
+
+function emitSourceManifest(options = {}) {
+  const root = resolve(options.root || process.cwd());
+  const configPath = resolve(root, options.config || "layouts.library.json");
+  const config = readJson(configPath);
+  if (config.mode !== "source") throw new Error(`${configPath} is not a source library config`);
+  const exports = config.exports || [];
+  if (exports.length === 0) throw new Error(`${configPath} must declare its public Layout exports`);
+  const duplicates = exports.filter((name, index) => exports.indexOf(name) !== index);
+  if (duplicates.length) throw new Error(`${configPath} repeats Layout export ${duplicates[0]}`);
+  const sourcePackage = readJson(resolve(root, "package.json"));
+  const outputRoot = resolve(root, config.output || "dist");
+  const components = Object.fromEntries(
+    [...exports].sort().map((name) => [name, { kind: "embedded" }]),
+  );
+  const manifest = {
+    format: FORMAT,
+    package: sourcePackage.name,
+    version: sourcePackage.version,
+    components,
+  };
+  mkdirSync(outputRoot, { recursive: true });
+  writeJson(resolve(outputRoot, "layouts.manifest.json"), manifest);
+  return { root, outputRoot, manifest };
 }
 
 function modulePath(fromFile, toFile) {
@@ -196,6 +311,7 @@ function assertComponent(component, sourceRoot, outputRoot) {
 
   const generatedRelative = relative(outputRoot, generatedLayout).split(sep).join("/");
   return {
+    kind: "generated",
     entry: `./${component.entry}`,
     recipe: `./${component.recipe}`,
     recipeExport: component.recipeExport,
@@ -208,6 +324,7 @@ function compileLibrary(options = {}) {
   const root = resolve(options.root || process.cwd());
   const configPath = resolve(root, options.config || "layouts.library.json");
   const config = readJson(configPath);
+  if (config.mode === "source") return generateLibrarySource({ ...options, root });
   const sourceRoot = resolve(root, config.source || "src");
   const outputRoot = resolve(root, config.output || "bundle");
   const sourcePackage = readJson(resolve(root, "package.json"));
@@ -291,15 +408,42 @@ function pluginSolidLayoutsLibrary(options = {}) {
   return {
     name: "solid-layouts:library",
     setup(api) {
+      const root = resolve(options.root || api.context.rootPath);
+      const configPath = resolve(root, options.config || "layouts.library.json");
+      const config = readJson(configPath);
       const compile = () =>
         compileLibrary({
           ...options,
-          root: options.root || api.context.rootPath,
+          root,
         });
       api.onBeforeBuild(compile);
       api.onBeforeDevCompile(compile);
+      if (config.mode === "source") {
+        const sourceRoot = resolve(root, config.source || "src");
+        api.modifyBundlerChain({
+          order: "pre",
+          handler(chain) {
+            chain.module
+              .rule("solid-layouts-library")
+              .test(/\.recipe\.(?:js|jsx|ts|tsx)$/)
+              .include.add(sourceRoot)
+              .end()
+              .use("solid-layouts-library")
+              .loader(require.resolve("./loader.js"))
+              .options({ mode: "library" });
+          },
+        });
+        api.onAfterBuild(() => emitSourceManifest({ ...options, root }));
+      }
     },
   };
 }
 
-module.exports = { FORMAT, compileLibrary, pluginSolidLayoutsLibrary };
+module.exports = {
+  FORMAT,
+  compileLibrary,
+  generateLibrarySource,
+  emitSourceManifest,
+  lintLibrary,
+  pluginSolidLayoutsLibrary,
+};

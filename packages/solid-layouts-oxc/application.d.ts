@@ -30,7 +30,7 @@ export type CompiledApplication = {
 };
 
 export declare const APPLICATION_BOUNDARY: "solid-layouts/application-boundary";
-export declare const FORMAT: "solid-layouts-library-v1";
+export declare const FORMAT: "solid-layouts-library-v2";
 export declare function compileApplication(
   options?: SolidLayoutsApplicationOptions,
 ): CompiledApplication;

@@ -21,11 +21,16 @@
     "./application": {
       "types": "./application.d.ts",
       "default": "./application.js"
+    },
+    "./porting": {
+      "types": "./porting.d.ts",
+      "default": "./porting.js"
     }
   },
   "bin": {
     "solid-layouts-library": "bin/solid-layouts-library.js",
-    "solid-layouts-application": "bin/solid-layouts-application.js"
+    "solid-layouts-application": "bin/solid-layouts-application.js",
+    "solid-layouts-lint": "bin/solid-layouts-lint.js"
   },
   "files": [
     "index.js",
@@ -33,6 +38,7 @@
     "loader.js",
     "library.js",
     "application.js",
+    "porting.js",
     "bin",
     "*.node",
     "src",
