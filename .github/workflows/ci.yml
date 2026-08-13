@@ -104,6 +104,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check out the pinned upstream Solid JSX corpus
+        uses: actions/checkout@v4
+        with:
+          repository: ryansolid/dom-expressions
+          ref: 062d23cc29731e8c2281ddfa36188d438a90e21f
+          path: upstream/dom-expressions
+          sparse-checkout: packages/babel-plugin-jsx-dom-expressions/test
+          sparse-checkout-cone-mode: false
+
       - uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
@@ -122,6 +131,11 @@ jobs:
 
       - name: Test the application compiler host
         run: bun run test:application
+
+      - name: Test the upstream Solid JSX corpus
+        env:
+          DOM_EXPRESSIONS_FIXTURES: ${{ github.workspace }}/upstream/dom-expressions/packages/babel-plugin-jsx-dom-expressions/test
+        run: bun run test:upstream-solid
 
       - name: Regenerate the four-component package fixture
         working-directory: Test-UI

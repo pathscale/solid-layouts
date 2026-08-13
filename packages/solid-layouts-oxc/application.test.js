@@ -44,6 +44,33 @@ function makePackageEditable(root, packageRoot) {
   return copy;
 }
 
+function addPublicComponentSubpath(root, packageRoot, options = {}) {
+  const copy = makePackageEditable(root, packageRoot);
+  const packageJsonPath = join(copy, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  packageJson.exports["./components/*"] = {
+    types: "./components/*/index.ts",
+    import: "./components/*/index.ts",
+  };
+  writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+  const component = options.component || "Icon";
+  const imported = options.imported || "default";
+  const directory = options.directory || "icon";
+  const subpathRoot = join(copy, "components", directory);
+  mkdirSync(subpathRoot, { recursive: true });
+  writeFileSync(join(subpathRoot, "index.ts"), options.subpathSource || "export {};\n");
+  const publicEntry = join(copy, "index.ts");
+  const declaration = imported === component
+    ? component
+    : `${imported} as ${component}`;
+  writeFileSync(
+    publicEntry,
+    `${readFileSync(publicEntry, "utf8")}\nexport { ${declaration} } from "./components/${directory}/index.ts";\n`,
+  );
+  return copy;
+}
+
 test("resolves an exact component index from C and accepts its public export", () => {
   const { root } = fixture();
   const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
@@ -108,6 +135,59 @@ test("accepts another public component exported by C", () => {
   expect(result.failed).toBe(false);
   expect(result.changed).toBe(true);
   expect(result.code).toContain(application.layoutSources[0].resolved);
+});
+
+test("validates a default component imported through a public package subpath", () => {
+  const { root, packageRoot } = fixture();
+  addPublicComponentSubpath(root, packageRoot);
+  const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
+  const subpath = application.layoutSources.find(
+    ({ module }) => module === "@pathscale/test-ui/components/icon",
+  );
+  expect(subpath.module).toBe("@pathscale/test-ui/components/icon");
+  expect(subpath.exports).toEqual(["default"]);
+  expect(subpath.resolved.endsWith("/editable-package/components/icon/index.ts")).toBe(true);
+  const result = compileApplicationFile(
+    'import StatusIcon from "@pathscale/test-ui/components/icon"; export const View = () => <StatusIcon />;',
+    join(root, "src/View.tsx"),
+    application,
+  );
+  expect(result.failed).toBe(false);
+  expect(result.changed).toBe(true);
+  expect(result.code).toContain(subpath.resolved);
+});
+
+test("validates a named component imported through a public package subpath", () => {
+  const { root, packageRoot } = fixture();
+  addPublicComponentSubpath(root, packageRoot, {
+    component: "Icon",
+    imported: "default",
+    directory: "status",
+    subpathSource: 'export { default, Icon } from "./Status.tsx";\n',
+  });
+  const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
+  const result = compileApplicationFile(
+    'import { Icon as StatusIcon } from "@pathscale/test-ui/components/status"; export const View = () => <StatusIcon />;',
+    join(root, "src/View.tsx"),
+    application,
+  );
+  expect(result.failed).toBe(false);
+});
+
+test("rejects a subpath component absent from C's manifest", () => {
+  const { root, packageRoot } = fixture();
+  addPublicComponentSubpath(root, packageRoot, {
+    component: "Missing",
+    directory: "missing",
+  });
+  const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
+  expect(() =>
+    compileApplicationFile(
+      'import Missing from "@pathscale/test-ui/components/missing"; export const View = () => <Missing />;',
+      join(root, "src/View.tsx"),
+      application,
+    ),
+  ).toThrow("public export `default`");
 });
 
 test("rejects a public export absent from C's manifest", () => {

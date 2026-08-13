@@ -57,6 +57,90 @@ function publicEntryFrom(packageJson) {
   throw new Error(`${packageJson.name} has no public JavaScript entry`);
 }
 
+function exportTarget(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const condition of ["import", "default"]) {
+      const target = exportTarget(value[condition]);
+      if (target) return target;
+    }
+  }
+}
+
+function publicSubpathForTarget(module, packageJson, packageRoot, target) {
+  const targetPath = relative(packageRoot, target).split(sep).join("/");
+  for (const [subpath, value] of Object.entries(packageJson.exports || {})) {
+    if (subpath === "." || !subpath.startsWith("./")) continue;
+    const pattern = exportTarget(value);
+    if (!pattern?.startsWith("./")) continue;
+    const targetPattern = pattern.slice(2);
+    const wildcard = targetPattern.indexOf("*");
+    if (wildcard === -1) {
+      if (targetPath === targetPattern) return `${module}${subpath.slice(1)}`;
+      continue;
+    }
+    const prefix = targetPattern.slice(0, wildcard);
+    const suffix = targetPattern.slice(wildcard + 1);
+    if (!targetPath.startsWith(prefix) || !targetPath.endsWith(suffix)) continue;
+    const matched = targetPath.slice(prefix.length, targetPath.length - suffix.length);
+    return `${module}${subpath.slice(1).replace("*", matched)}`;
+  }
+}
+
+function namedExports(entry) {
+  const source = readFileSync(entry, "utf8");
+  const names = new Set();
+  const declaration = /export\s*\{([^}]+)\}(?:\s*from\s*["'][^"']+["'])?;?/g;
+  for (const match of source.matchAll(declaration)) {
+    for (const value of match[1].split(",")) {
+      const parts = value.trim().replace(/^type\s+/, "").split(/\s+as\s+/);
+      const exported = (parts[1] || parts[0])?.trim();
+      if (exported) names.add(exported);
+    }
+  }
+  return names;
+}
+
+function publicSubpathSources(source) {
+  const entrySource = readFileSync(source.publicEntry, "utf8");
+  const publicComponents = new Set(source.exports);
+  const subpaths = new Map();
+  const reexport = /export\s*\{([^}]+)\}\s*from\s*["']([^"']+)["'];?/g;
+  for (const match of entrySource.matchAll(reexport)) {
+    const specifier = match[2];
+    if (!specifier.startsWith(".")) continue;
+    const target = resolve(dirname(source.publicEntry), specifier);
+    if (!existsSync(target)) continue;
+    const module = publicSubpathForTarget(
+      source.module,
+      source.packageJson,
+      source.packageRoot,
+      target,
+    );
+    if (!module) continue;
+    const subpath = subpaths.get(module) || { module, exports: new Set(), resolved: target };
+    for (const name of namedExports(target)) {
+      if (publicComponents.has(name)) subpath.exports.add(name);
+    }
+    for (const declaration of match[1].split(",")) {
+      const parts = declaration.trim().split(/\s+as\s+/);
+      const imported = parts[0]?.trim();
+      const exported = (parts[1] || parts[0])?.trim();
+      if (imported && exported && publicComponents.has(exported)) {
+        subpath.exports.add(imported);
+      }
+    }
+    subpaths.set(module, subpath);
+  }
+  return [...subpaths.values()]
+    .map(({ module, exports, resolved }) => ({
+      module,
+      exports: [...exports].sort(),
+      resolved,
+    }))
+    .sort((a, b) => a.module.localeCompare(b.module));
+}
+
 function resolvePublicPackageEntry(root, module) {
   const packageJsonPath = resolvePackageJson(root, module);
   const packageRoot = dirname(packageJsonPath);
@@ -159,6 +243,7 @@ function resolveLayoutSource(root, configured) {
     exports,
     publicEntry,
     packageRoot,
+    packageJson,
     packageJsonPath,
     manifestPath,
     manifest,
@@ -172,14 +257,15 @@ function compileApplication(options = {}) {
     throw new Error("application compiler requires at least one Layout package");
   }
   const sources = layouts.map((configured) => resolveLayoutSource(root, configured));
+  const rootSources = sources.map(({ module, exports, publicEntry }) => ({
+    module,
+    exports,
+    resolved: publicEntry,
+  }));
   return {
     root,
     sources,
-    layoutSources: sources.map(({ module, exports, publicEntry }) => ({
-      module,
-      exports,
-      resolved: publicEntry,
-    })),
+    layoutSources: [...rootSources, ...sources.flatMap(publicSubpathSources)],
   };
 }
 
