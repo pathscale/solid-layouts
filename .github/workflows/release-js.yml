@@ -112,4 +112,4 @@ jobs:
           }
 
       - name: Publish
-        run: npm publish npm-package/*.tgz --access public
+        run: npm publish ./npm-package/*.tgz --access public

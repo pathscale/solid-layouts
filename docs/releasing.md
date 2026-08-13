@@ -34,7 +34,7 @@ a secret to GitHub and does not publish the real implementation outside CI.
 Manual workflow dispatch is an inspection path, not a publish path. It packages
 the selected module and uploads `npm-package`, while the publish job is
 intentionally skipped. For `solid-layouts-oxc`, this proves the tarball contains
-all four native bindings before a release tag exists.
+all three supported native bindings before a release tag exists.
 
 With npm 11.15.0 or newer, a maintainer with package access and two-factor
 authentication can configure the publishers from the repository root:
