@@ -121,3 +121,15 @@ test("fails when the Layout export cannot be derived", () => {
 
   expect(() => compileLibrary({ root })).toThrow("expected public Layout export IconLayout");
 });
+
+test("accepts a formatted multiline Layout annotation", () => {
+  const root = fixture();
+  const layoutPath = join(root, "src/components/icon/Icon.layout.tsx");
+  const layout = readFileSync(layoutPath, "utf8").replace(
+    "Layout<typeof icon, IconProps>",
+    "Layout<\n  typeof icon,\n  IconProps\n>",
+  );
+  writeFileSync(layoutPath, layout);
+
+  expect(() => compileLibrary({ root })).not.toThrow();
+});

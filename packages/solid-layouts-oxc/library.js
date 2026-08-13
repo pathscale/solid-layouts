@@ -50,6 +50,10 @@ function portable(path) {
   return path.split(sep).join("/");
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function resolveModule(fromFile, specifier) {
   if (!specifier.startsWith(".")) {
     throw new Error(`${fromFile}: Layout recipes must be imported through a relative path`);
@@ -343,7 +347,9 @@ function assertComponent(component, sourceRoot, outputRoot) {
   const recipeOutput = readFileSync(generatedRecipe, "utf8");
   const entryOutput = readFileSync(generatedEntry, "utf8");
 
-  if (!layoutInput.includes(`Layout<typeof ${component.recipeExport}`)) {
+  if (!new RegExp(
+    `\\bLayout\\s*<\\s*typeof\\s+${escapeRegExp(component.recipeExport)}\\b`,
+  ).test(layoutInput)) {
     throw new Error(
       `${component.name}: ${component.layout} does not name ${component.recipeExport} in its Layout annotation`,
     );
