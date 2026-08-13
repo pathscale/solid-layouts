@@ -29,7 +29,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rm -rf dist && bun build src/index.ts src/recipe.ts src/cx.ts --outdir dist --target browser --format esm --splitting --external solid-js --external 'solid-js/*' && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && bun build src/index.ts --outfile dist/index.js --target browser --format esm --external solid-js --external 'solid-js/*' && bun build src/recipe.ts --outfile dist/recipe.js --target browser --format esm --external solid-js --external 'solid-js/*' && bun build src/cx.ts --outfile dist/cx.js --target browser --format esm --external solid-js --external 'solid-js/*' && tsc -p tsconfig.build.json",
     "prepack": "bun run build",
     "test": "bun test --conditions=browser",
     "typecheck": "tsc --noEmit"
