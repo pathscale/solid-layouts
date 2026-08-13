@@ -86,7 +86,7 @@ function validateComponent(module, packageRoot, name, component) {
   if (!new RegExp(`\\bexport\\s+const\\s+${component.layoutExport}\\b`).test(layoutSource)) {
     throw new Error(`${module}: ${name} Layout export ${component.layoutExport} was not found`);
   }
-  const callSite = `export const ${name} = __defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} });`;
+  const callSite = `export const ${name} = __defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} })`;
   if (!entrySource.includes(callSite)) {
     throw new Error(`${module}: ${name} entry call site disagrees with its Layout manifest record`);
   }

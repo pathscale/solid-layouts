@@ -9,6 +9,7 @@
       "recipeExport": "icon",
       "layout": "components/icon/Icon.layout.tsx",
       "layoutExport": "IconLayout",
+      "propsType": "IconProps",
       "typeExports": ["IconProps"]
     },
     {
@@ -18,6 +19,7 @@
       "recipeExport": "button",
       "layout": "components/button/Button.layout.tsx",
       "layoutExport": "ButtonLayout",
+      "propsType": "ButtonProps",
       "typeExports": ["ButtonProps", "ButtonVariant", "ButtonSize"]
     }
   ]

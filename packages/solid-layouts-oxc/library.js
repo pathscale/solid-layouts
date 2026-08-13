@@ -71,11 +71,18 @@ function generateEntries(components, outputRoot) {
     const recipe = resolve(outputRoot, component.recipe);
     const lines = entries.get(entry) || [
       'import { defineComponent as __defineLayoutComponent } from "solid-layouts/application-boundary";',
+      'import type { Component as __LayoutComponent } from "solid-js";',
     ];
+    const componentExpression = component.propsType
+      ? `__defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} }) as __LayoutComponent<__${component.name}Props>`
+      : `__defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} })`;
     lines.push(
       `import { ${component.layoutExport} } from ${JSON.stringify(modulePath(entry, generatedLayout))};`,
       `import { ${component.recipeExport} } from ${JSON.stringify(modulePath(entry, recipe))};`,
-      `export const ${component.name} = __defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} });`,
+      ...(component.propsType
+        ? [`import type { ${component.propsType} as __${component.name}Props } from ${JSON.stringify(modulePath(entry, generatedLayout))};`]
+        : []),
+      `export const ${component.name} = ${componentExpression};`,
     );
     if (component.typeExports?.length) {
       lines.push(

@@ -1,9 +1,12 @@
 import { defineComponent as __defineLayoutComponent } from "solid-layouts/application-boundary";
+import type { Component as __LayoutComponent } from "solid-js";
 import { IconLayout } from "./components/icon/Icon.generated";
 import { icon } from "./components/icon/Icon.recipe";
-export const Icon = __defineLayoutComponent({ recipe: icon, layout: IconLayout });
+import type { IconProps as __IconProps } from "./components/icon/Icon.generated";
+export const Icon = __defineLayoutComponent({ recipe: icon, layout: IconLayout }) as __LayoutComponent<__IconProps>;
 export type { IconProps } from "./components/icon/Icon.generated";
 import { ButtonLayout } from "./components/button/Button.generated";
 import { button } from "./components/button/Button.recipe";
-export const Button = __defineLayoutComponent({ recipe: button, layout: ButtonLayout });
+import type { ButtonProps as __ButtonProps } from "./components/button/Button.generated";
+export const Button = __defineLayoutComponent({ recipe: button, layout: ButtonLayout }) as __LayoutComponent<__ButtonProps>;
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./components/button/Button.generated";
