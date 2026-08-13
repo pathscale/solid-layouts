@@ -1,6 +1,6 @@
 {
   "name": "rsbuild-plugin-solid-layouts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Rsbuild integration for the Solid Layouts library and application compilers",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,7 @@
     "index.d.ts"
   ],
   "dependencies": {
-    "solid-layouts-oxc": "0.1.1"
+    "solid-layouts-oxc": "0.1.2"
   },
   "peerDependencies": {
     "@rsbuild/core": ">=1.3.0"

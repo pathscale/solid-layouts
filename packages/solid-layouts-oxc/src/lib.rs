@@ -5,7 +5,8 @@
 //! `cargo test` run the whole pass with no Node, no Bun and no bundler.
 
 pub use layouts_common::{
-    CompilerMode, Diagnostic, FileKind, LayoutSource, Severity, TransformOptions, TransformResult,
+    CompilerMode, Diagnostic, FileKind, LayoutSource, LibraryOutput, Severity, TransformOptions,
+    TransformResult,
 };
 pub use layouts_transform::linter::{
     ApplicationSource, ProjectDiagnostic, ProjectFile, lint_application, lint_project,
@@ -51,6 +52,7 @@ mod binding {
     #[napi(object)]
     pub struct JsOptions {
         pub mode: String,
+        pub library_output: Option<String>,
         pub layout_sources: Option<Vec<JsLayoutSource>>,
         pub parse_only: Option<bool>,
     }
@@ -162,6 +164,11 @@ mod binding {
             other => panic!("unknown solid-layouts compiler mode: {other}"),
         };
         let mut options_inner = layouts_common::TransformOptions::new(filename, mode);
+        options_inner.library_output = match given.library_output.as_deref() {
+            None | Some("layout") => layouts_common::LibraryOutput::Layout,
+            Some("component") => layouts_common::LibraryOutput::Component,
+            Some(other) => panic!("unknown solid-layouts library output: {other}"),
+        };
         if let Some(layout_sources) = given.layout_sources {
             options_inner.config.sources = layout_sources
                 .into_iter()

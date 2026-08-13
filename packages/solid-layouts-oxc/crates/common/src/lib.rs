@@ -31,6 +31,16 @@ pub enum CompilerMode {
     Application,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryOutput {
+    /// A two-parameter Layout consumed by a compiler-generated package entry.
+    #[default]
+    Layout,
+    /// A Solid component wrapper adjacent to a migrated source module.
+    Component,
+}
+
 /// One resolved Layout package available to an application build.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,6 +91,8 @@ pub struct TransformOptions {
     pub filename: String,
     pub mode: CompilerMode,
     #[serde(default)]
+    pub library_output: LibraryOutput,
+    #[serde(default)]
     pub config: LayoutsConfig,
     /// Off by default. With it set the pass parses and returns the source
     /// unchanged, which is how a host proves the pipeline is wired before any
@@ -94,6 +106,7 @@ impl TransformOptions {
         Self {
             filename: filename.into(),
             mode,
+            library_output: LibraryOutput::default(),
             config: LayoutsConfig::default(),
             parse_only: false,
         }

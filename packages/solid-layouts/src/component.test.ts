@@ -437,6 +437,28 @@ describe("defineComponent: what p unwraps", () => {
 });
 
 describe("defineComponent: layouts and plain HTML", () => {
+  test("an embedded component keeps prop routing inside its compiled layout", () => {
+    const { seen, layout } = capturing();
+    const Button = defineComponent({
+      recipe: button,
+      layout: layout as never,
+      embedded: true,
+    });
+
+    const dispose = mount(Button, {
+      color: "danger",
+      id: "save",
+      value: 7,
+    });
+
+    expect(seen.p?.color).toBe("danger");
+    expect(seen.p?.id).toBe("save");
+    expect(seen.p?.value).toBe(7);
+    expect(seen.slot?.root).not.toHaveProperty("id");
+    expect(seen.slot?.root?.class).toContain("btn--danger");
+    dispose();
+  });
+
   test("the root slot carries the caller's HTML props", () => {
     // A layout only ever sees `slot`, so without the root slot carrying them
     // `id` and `onClick` reached nothing at all — the no-layout path spreads

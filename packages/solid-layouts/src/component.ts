@@ -97,6 +97,8 @@ export type DefineComponentConfig<
   /** Receives behaviour props only, never presentation. */
   setup?: (behaviour: Record<string, unknown>) => Record<string, unknown>;
   layout?: Layout<R, Model>;
+  /** The compiled Layout owns its existing prop split during source migration. */
+  embedded?: boolean;
   /**
    * Wraps the layout. Assembly, so it does not belong in the markup.
    *
@@ -132,7 +134,7 @@ export function defineComponent<
 >(
   config: DefineComponentConfig<R, Model>,
 ): (props: ComponentProps<R, Model>) => JSX.Element {
-  const { recipe, setup, layout, provide } = config;
+  const { recipe, setup, layout, provide, embedded = false } = config;
   const componentName = config.name ?? recipe.config.component;
   const element = config.element ?? recipe.config.element ?? "div";
 
@@ -240,7 +242,7 @@ export function defineComponent<
         // Recipe attributes go on top, so a caller still cannot overwrite the
         // class or the `data-slot` that identifies the component.
         get: () =>
-          name === rootSlot
+          name === rootSlot && !embedded
             ? ({
                 ...asAttributes(passthrough as Record<string, unknown>),
                 ...(resolved()[name] as SlotAttrs),
@@ -274,6 +276,15 @@ export function defineComponent<
     // model's accessors. Both are getters, which is what lets a layout say
     // `props.expanded` instead of `props.expanded()`.
     const readable = {} as Record<string, unknown>;
+    if (embedded) {
+      for (const key of Object.keys(props)) {
+        Object.defineProperty(readable, key, {
+          get: () => props[key],
+          enumerable: true,
+          configurable: true,
+        });
+      }
+    }
     for (const key of presentationKeys) {
       Object.defineProperty(readable, key, {
         get: () => presentationValue(key),

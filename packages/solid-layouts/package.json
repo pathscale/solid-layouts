@@ -1,6 +1,6 @@
 {
   "name": "solid-layouts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Logic in a .ts file, markup in a .layout.tsx file, presentation declared at the call site",
   "license": "MIT",
   "type": "module",

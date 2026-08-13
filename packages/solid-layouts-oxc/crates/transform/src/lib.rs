@@ -17,7 +17,7 @@ pub mod linter;
 pub mod match_layouts;
 
 use layouts_common::{
-    CompilerMode, Diagnostic, FileKind, Severity, TransformOptions, TransformResult,
+    CompilerMode, Diagnostic, FileKind, LibraryOutput, Severity, TransformOptions, TransformResult,
 };
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -34,6 +34,7 @@ use oxc_span::{GetSpan, SourceType, Span};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoundLayout {
     pub binding: String,
+    pub binding_span: Span,
     /// The identifier inside `Layout<typeof HERE>`. Absent when the annotation
     /// is `Layout<...>` with something the pass does not recognise, which is
     /// reported rather than guessed at.
@@ -42,6 +43,9 @@ pub struct FoundLayout {
     pub parameters: usize,
     pub parameters_span: Option<Span>,
     pub body_span: Option<Span>,
+    pub props_span: Option<Span>,
+    pub statement_span: Span,
+    pub export_prefix_span: Option<Span>,
 }
 
 /// Runs the pass over one file.
@@ -119,7 +123,9 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
     }
 
     let code = match options.mode {
-        CompilerMode::Library => compile_library_source(source, &parsed.program, &layouts),
+        CompilerMode::Library => {
+            compile_library_source(source, &parsed.program, &layouts, options.library_output)
+        }
         CompilerMode::Application => compile_application_source(source, &parsed.program, options),
     };
     let changed = code != source;
@@ -204,7 +210,12 @@ fn compile_application_source(
     apply_edits(source, edits)
 }
 
-fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundLayout]) -> String {
+fn compile_library_source(
+    source: &str,
+    program: &Program<'_>,
+    layouts: &[FoundLayout],
+    output: LibraryOutput,
+) -> String {
     let recipes = compile_recipe::find_recipes(program);
     let index = compile_recipe::SlotIndex::build(&recipes);
 
@@ -240,6 +251,13 @@ fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundL
         .semantic;
     let unresolved = semantic.scoping().root_unresolved_references();
 
+    if output == LibraryOutput::Component && !layouts.is_empty() {
+        edits.push(SourceEdit::Insert {
+            at: 0,
+            text: "import { defineComponent as __defineLayoutComponent } from \"solid-layouts/application-boundary\";\nimport type { Component as __LayoutComponent } from \"solid-js\";\n".to_owned(),
+        });
+    }
+
     for layout in layouts.iter().filter(|layout| layout.parameters == 0) {
         let Some(parameters_span) = layout.parameters_span else {
             continue;
@@ -260,11 +278,45 @@ fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundL
             start: parameters_span.start as usize,
             end: parameters_span.end as usize,
             text: if uses_slots {
-                "({ slot, children }, p)".to_owned()
+                "({ slot, children }, p)"
             } else {
-                "(_stable, p)".to_owned()
-            },
+                "(_stable, p)"
+            }
+            .to_owned(),
         });
+
+        if output == LibraryOutput::Component {
+            let raw = format!("__solidLayout{}", layout.binding);
+            edits.push(SourceEdit::Replace {
+                start: layout.binding_span.start as usize,
+                end: layout.binding_span.end as usize,
+                text: raw.clone(),
+            });
+            if let Some(prefix) = layout.export_prefix_span {
+                edits.push(SourceEdit::Replace {
+                    start: prefix.start as usize,
+                    end: prefix.end as usize,
+                    text: String::new(),
+                });
+            }
+            let props = layout
+                .props_span
+                .map(|span| &source[span.start as usize..span.end as usize])
+                .unwrap_or("Record<string, unknown>");
+            let exported = if layout.export_prefix_span.is_some() {
+                "export "
+            } else {
+                ""
+            };
+            edits.push(SourceEdit::Insert {
+                at: layout.statement_span.end as usize,
+                text: format!(
+                    "\n{exported}const {} = __defineLayoutComponent({{ recipe: {}, layout: {raw}, embedded: true }}) as __LayoutComponent<{props}>;",
+                    layout.binding,
+                    layout.recipe.as_deref().expect("validated Layout recipe"),
+                ),
+            });
+        }
 
         for (name, references) in unresolved {
             for reference_id in references {
@@ -338,8 +390,11 @@ pub fn find_layouts(program: &Program<'_>) -> Vec<FoundLayout> {
             continue;
         };
 
+        let exported = matches!(statement, Statement::ExportDeclaration(_));
         for declarator in &declaration.declarations {
-            if let Some(layout) = as_layout(declarator) {
+            if let Some(layout) =
+                as_layout(declarator, statement.span(), declaration.span, exported)
+            {
                 found.push(layout);
             }
         }
@@ -368,7 +423,12 @@ fn variable_declaration<'a, 'b>(
     }
 }
 
-fn as_layout(declarator: &VariableDeclarator<'_>) -> Option<FoundLayout> {
+fn as_layout(
+    declarator: &VariableDeclarator<'_>,
+    statement_span: Span,
+    declaration_span: Span,
+    exported: bool,
+) -> Option<FoundLayout> {
     let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
         return None;
     };
@@ -397,6 +457,11 @@ fn as_layout(declarator: &VariableDeclarator<'_>) -> Option<FoundLayout> {
             },
             _ => None,
         });
+    let props_span = reference
+        .type_arguments
+        .as_ref()
+        .and_then(|arguments| arguments.params.get(1))
+        .map(GetSpan::span);
 
     let (parameters, parameters_span, body_span) = match declarator.init.as_ref() {
         Some(Expression::ArrowFunctionExpression(arrow)) => (
@@ -409,11 +474,16 @@ fn as_layout(declarator: &VariableDeclarator<'_>) -> Option<FoundLayout> {
 
     Some(FoundLayout {
         binding: binding.name.to_string(),
+        binding_span: binding.span,
         recipe,
         span: declarator.span,
         parameters,
         parameters_span,
         body_span,
+        props_span,
+        statement_span,
+        export_prefix_span: exported
+            .then(|| Span::new(statement_span.start, declaration_span.start)),
     })
 }
 
@@ -578,6 +648,45 @@ const Button: Layout<typeof button, ButtonProps> = () => {
         assert!(
             !result.code.contains("{ slot, children }"),
             "{}",
+            result.code
+        );
+    }
+
+    #[test]
+    fn component_output_wraps_the_generated_layout_as_a_solid_component() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { button } from "./Button.recipe";
+export const Button: Layout<typeof button, ButtonProps> = () => {
+  return <button disabled={props.disabled}>{props.children}</button>;
+};
+"#;
+        let mut options = TransformOptions::new("Button.layout.tsx", CompilerMode::Library);
+        options.library_output = LibraryOutput::Component;
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.code.contains("const __solidLayoutButton:"),
+            "{}",
+            result.code
+        );
+        assert!(
+            result.code.contains("export const Button = __defineLayoutComponent({ recipe: button, layout: __solidLayoutButton, embedded: true }) as __LayoutComponent<ButtonProps>;"),
+            "{}",
+            result.code
+        );
+        assert!(result.code.contains("(_stable, p) =>"), "{}", result.code);
+        assert!(
+            !result.code.contains("export const __solidLayoutButton"),
+            "{}",
+            result.code
+        );
+
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &result.code, SourceType::tsx()).parse();
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "{:?}\n{}",
+            parsed.diagnostics,
             result.code
         );
     }

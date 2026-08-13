@@ -30,6 +30,7 @@ module.exports = function layoutsLoader(source) {
   try {
     result = transform(source, filename, {
       mode: options.mode,
+      libraryOutput: options.libraryOutput,
       layoutSources: options.layoutSources,
       parseOnly: options.parseOnly,
     });

@@ -48,8 +48,8 @@ function formatDiagnostics(filename, diagnostics) {
     .join("\n");
 }
 
-function compileFile(source, filename) {
-  const result = transform(source, filename, { mode: "library" });
+function compileFile(source, filename, libraryOutput = "layout") {
+  const result = transform(source, filename, { mode: "library", libraryOutput });
   if (result.failed) throw new Error(formatDiagnostics(filename, result.diagnostics));
   return result.code;
 }
@@ -132,7 +132,7 @@ function generateLibrarySource(options = {}) {
   for (const input of filesBelow(lint.sourceRoot)) {
     if (!/\.layout\.(tsx|jsx)$/.test(input)) continue;
     const output = input.replace(/\.layout\.(tsx|jsx)$/, ".generated.$1");
-    const compiled = `${compileFile(readFileSync(input, "utf8"), input).trimEnd()}\n`;
+    const compiled = `${compileFile(readFileSync(input, "utf8"), input, "component").trimEnd()}\n`;
     const current = existsSync(output) ? readFileSync(output, "utf8") : "";
     if (current === compiled) continue;
     if (options.check) {
@@ -430,7 +430,7 @@ function pluginSolidLayoutsLibrary(options = {}) {
               .end()
               .use("solid-layouts-library")
               .loader(require.resolve("./loader.js"))
-              .options({ mode: "library" });
+              .options({ mode: "library", libraryOutput: "layout" });
           },
         });
         api.onAfterBuild(() => emitSourceManifest({ ...options, root }));

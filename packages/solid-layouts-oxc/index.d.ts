@@ -1,4 +1,5 @@
 export type CompilerMode = "library" | "application";
+export type LibraryOutput = "layout" | "component";
 
 export type LayoutSource = {
   module: string;
@@ -8,6 +9,7 @@ export type LayoutSource = {
 
 export type TransformOptions = {
   mode: CompilerMode;
+  libraryOutput?: LibraryOutput;
   layoutSources?: LayoutSource[];
   parseOnly?: boolean;
 };
