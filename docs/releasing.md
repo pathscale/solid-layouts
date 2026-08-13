@@ -20,20 +20,21 @@ provenance automatically for Trusted Publishing releases.
 ## One-time package bootstrap
 
 npm can only attach a trusted publisher after a package exists. The first version
-of each new package therefore has a one-time bootstrap; this does not add a secret
-to GitHub.
+of each new package therefore needs a one-time name reservation; this does not add
+a secret to GitHub and does not publish the real implementation outside CI.
 
-1. Run the relevant workflow manually. Manual dispatch packages the selected
-   module and uploads its tarball, but the publish job is intentionally skipped.
-2. Download and inspect the `npm-package` artifact.
-3. Authenticate interactively on a maintainer workstation with npm web login and
-   publish that exact tarball once.
-4. Configure the GitHub Actions trusted publisher immediately.
-5. Log out of npm on the workstation.
+1. Publish a minimal `0.0.0` reservation containing only package metadata and a
+   README from a maintainer workstation. It must contain no compiler or runtime
+   implementation.
+2. Configure the GitHub Actions trusted publisher immediately.
+3. Push the `0.1.0` release tag. GitHub Actions builds and publishes the first real
+   package through OIDC.
+4. Log out of npm on the workstation.
 
-For `solid-layouts` and `rsbuild-plugin-solid-layouts`, manually dispatch
-`release-js.yml` and choose the package. For `solid-layouts-oxc`, manually dispatch
-`release-oxc.yml`; its artifact contains all four native bindings.
+Manual workflow dispatch is an inspection path, not a publish path. It packages
+the selected module and uploads `npm-package`, while the publish job is
+intentionally skipped. For `solid-layouts-oxc`, this proves the tarball contains
+all four native bindings before a release tag exists.
 
 With npm 11.15.0 or newer, a maintainer with package access and two-factor
 authentication can configure the publishers from the repository root:
