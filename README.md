@@ -13,6 +13,7 @@ JSX names are case-sensitive. `<button>` is a native HTML element and bypasses L
 - [Compiler modes, public entry points, failures, and the Chuzz integration](./docs/compiler-modes-and-chuzz-application-plan.md)
 - [Porting from Vue](./docs/porting-from-vue.md)
 - [Layout linting, porting reports, baselines, and user-owned recipes](./docs/linting-and-porting.md)
+- [Local complex components and the cross-application pattern inventory](./docs/local-complex-components-and-pattern-inventory.md)
 - [Releasing with npm Trusted Publishing](./docs/releasing.md)
 - [Original design document](https://github.com/pathscale/ui/blob/layouts/docs/layouts.md)
 
@@ -46,7 +47,7 @@ If B cannot match an authored template to its recipe, B fails. If E cannot resol
 There are two concrete sources:
 
 1. [`Test-UI/`](./Test-UI) in this repository is the working four-component producer fixture. It contains Icon, Button, Flex, and Chip extracted from the larger Pathscale migration and is a small complete A+B→C example.
-2. [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221) is the full Layout-authored migration. It was compiled, validated, merged, and published; the current package is `@pathscale/ui@1.5.0`.
+2. [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221) is the full Layout-authored migration. It was compiled, validated, merged, and published in the Layouts-only 2.x series; the current package is `@pathscale/ui@2.0.0`.
 
 To inspect the full authored UI:
 
@@ -65,7 +66,7 @@ bun add @pathscale/ui solid-layouts
 bun add -d rsbuild-plugin-solid-layouts
 ```
 
-The published packages are `solid-layouts@0.1.2`, `solid-layouts-oxc@0.1.2`, `rsbuild-plugin-solid-layouts@0.1.2`, and `@pathscale/ui@1.5.0`. The platform-specific native compiler binding is selected automatically for Apple arm64, Linux x64 GNU, or Linux arm64 GNU.
+The published packages are `solid-layouts@0.1.2`, `solid-layouts-oxc@0.1.2`, `rsbuild-plugin-solid-layouts@0.1.2`, and `@pathscale/ui@2.0.0`. The platform-specific native compiler binding is selected automatically for Apple arm64, Linux x64 GNU, or Linux arm64 GNU.
 
 For the application half, add `pluginSolidLayoutsApplication` before the Babel and Solid plugins:
 

@@ -4,7 +4,7 @@ For a command-by-command producer and consumer setup, start with [Getting starte
 
 ## Status
 
-Both compiler passes are live. The four-component Test-UI fixture remains the small conformance proof; the full PathScale UI migration is published as `@pathscale/ui@1.5.0`, and Chuzz PR #9 consumes it before the normal Solid transform.
+Both compiler passes are live. The four-component Test-UI fixture remains the small conformance proof; the full PathScale UI migration is published in the Layouts-only 2.x series as `@pathscale/ui@2.0.0`, and Chuzz PR #9 consumes it before the normal Solid transform.
 
 ```text
 A = user-authored Layout UI source
@@ -213,7 +213,7 @@ The application host builds the exact export index from C once at plugin setup. 
 
 Chuzz is a real Rsbuild/Solid application. It already consumes `@pathscale/ui`, renders Icon in multiple locations, disables code splitting, and is intended to expose both bundle cost and per-instance cost under Boa.
 
-The first proof changed Icon and Button against the small Test-UI C fixture. The completed consumer migration in Chuzz PR #9 imports the full published `@pathscale/ui@1.5.0` C package.
+The first proof changed Icon and Button against the small Test-UI C fixture. The completed consumer migration in Chuzz PR #9 imports the full published `@pathscale/ui@2.0.0` C package.
 
 This is not hand-generated component code. Chuzz imports the compiler-produced C package. The authored Layout, generated Layout TSX, compiled recipe table, and manifest remain owned by the producer/compiler pipeline.
 
@@ -305,7 +305,7 @@ The completed slice is:
 8. Added positive and hard-failure compiler tests.
 9. Made E resolve C's public entry and rewrite validated application imports instead of relying on a hand-written bundler alias.
 10. Published the runtime, native compiler, and Rsbuild plugin through npm Trusted Publishing.
-11. Compiled and published the full PathScale UI migration; the current package is `@pathscale/ui@1.5.0`.
+11. Compiled and published the full PathScale UI migration; the current package is `@pathscale/ui@2.0.0`.
 12. Pointed Chuzz PR #9 exclusively at registry packages and removed its local UI, compiler, runtime, and TypeScript aliases.
 13. Replaced raw browser-chrome elements with the published Button, Flex, Tabs, Disclosure, Modal, Surface, Text, ColorSwatch, and related components.
 

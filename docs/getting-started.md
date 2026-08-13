@@ -22,7 +22,7 @@ normal Solid/Rsbuild output F
 
 For Pathscale:
 
-- The full authored migration is the merged [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221); the current package is `@pathscale/ui@1.5.0`.
+- The full authored migration is the merged [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221); the current Layouts-only package is `@pathscale/ui@2.0.0`.
 - The working compiler fixture is [`Test-UI/`](../Test-UI) in this repository. It contains Icon and Button so every generated file remains easy to inspect while the application proof exercises real component markup changes.
 - The current real application consumer is [Chuzz PR #9](https://github.com/pathscale/chuzz/pull/9).
 
@@ -35,7 +35,7 @@ The complete public package set is live:
 - `solid-layouts@0.1.2`: shared runtime
 - `solid-layouts-oxc@0.1.2`: native compiler hosts, CLI, and linter
 - `rsbuild-plugin-solid-layouts@0.1.2`: stable Rsbuild facade
-- `@pathscale/ui@1.5.0`: compiled Layout UI package C
+- `@pathscale/ui@2.0.0`: compiled Layout UI package C
 
 Use registry package resolution for normal work. Object-shaped layout sources and an explicit runtime path remain development-only overrides for compiler fixtures.
 
