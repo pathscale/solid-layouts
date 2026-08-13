@@ -28,6 +28,10 @@ function resolvePackageJson(root, module) {
   try {
     return requireFromRoot.resolve(`${module}/package.json`);
   } catch (error) {
+    for (const searchRoot of requireFromRoot.resolve.paths(module) || []) {
+      const packageJsonPath = resolve(searchRoot, module, "package.json");
+      if (existsSync(packageJsonPath)) return packageJsonPath;
+    }
     throw new Error(`configured Layout package ${JSON.stringify(module)} cannot be resolved from ${root}\n${error.message}`);
   }
 }
@@ -51,6 +55,16 @@ function publicEntryFrom(packageJson) {
     if (typeof packageJson[field] === "string") return packageJson[field];
   }
   throw new Error(`${packageJson.name} has no public JavaScript entry`);
+}
+
+function resolvePublicPackageEntry(root, module) {
+  const packageJsonPath = resolvePackageJson(root, module);
+  const packageRoot = dirname(packageJsonPath);
+  const packageJson = readJson(packageJsonPath, `${module} package metadata`);
+  if (packageJson.name !== module) {
+    throw new Error(`resolved package ${packageJson.name} does not match ${module}`);
+  }
+  return requiredFile(packageRoot, publicEntryFrom(packageJson), `${module} public entry`);
 }
 
 function validateComponent(module, packageRoot, name, component) {
@@ -196,7 +210,7 @@ function pluginSolidLayoutsApplication(options = {}) {
       });
       const runtime = options.runtime
         ? resolve(application.root, options.runtime)
-        : createRequire(resolve(application.root, "package.json")).resolve("solid-layouts");
+        : resolvePublicPackageEntry(application.root, "solid-layouts");
       if (!existsSync(runtime)) throw new Error(`solid-layouts runtime not found: ${runtime}`);
 
       api.modifyBundlerChain({

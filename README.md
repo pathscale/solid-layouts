@@ -66,7 +66,7 @@ bun add @pathscale/ui solid-layouts
 bun add -d rsbuild-plugin-solid-layouts
 ```
 
-The published packages are `solid-layouts@0.1.2`, `solid-layouts-oxc@0.1.5`, `rsbuild-plugin-solid-layouts@0.1.2`, and `@pathscale/ui@2.0.0`. The platform-specific native compiler binding is selected automatically for Apple arm64, Linux x64 GNU, or Linux arm64 GNU.
+The published packages are `solid-layouts@0.1.2`, `solid-layouts-oxc@0.1.6`, `rsbuild-plugin-solid-layouts@0.1.3`, and `@pathscale/ui@2.1.0`. The platform-specific native compiler binding is selected automatically for Apple arm64, Linux x64 GNU, or Linux arm64 GNU.
 
 For the application half, add `pluginSolidLayoutsApplication` before the Babel and Solid plugins:
 

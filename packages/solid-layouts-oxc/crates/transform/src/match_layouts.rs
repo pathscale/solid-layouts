@@ -10,8 +10,8 @@ use std::collections::HashMap;
 
 use layouts_common::{Diagnostic, LayoutSource, LayoutsConfig};
 use oxc_ast::ast::{
-    Declaration, ImportDeclarationSpecifier, JSXElementName, JSXMemberExpression,
-    JSXMemberExpressionObject, Program, Statement,
+    BindingIdentifier, Declaration, ImportDeclarationSpecifier, JSXElementName,
+    JSXMemberExpression, JSXMemberExpressionObject, Program, Statement,
 };
 use oxc_ast_visit::Visit;
 use oxc_span::{GetSpan, Span};
@@ -158,7 +158,24 @@ pub fn find_origins(program: &Program<'_>) -> HashMap<String, Origin> {
         }
     }
 
+    let mut locals = LocalBindingCollector {
+        origins: &mut origins,
+    };
+    locals.visit_program(program);
+
     origins
+}
+
+struct LocalBindingCollector<'map> {
+    origins: &'map mut HashMap<String, Origin>,
+}
+
+impl<'a> Visit<'a> for LocalBindingCollector<'_> {
+    fn visit_binding_identifier(&mut self, identifier: &BindingIdentifier<'a>) {
+        self.origins
+            .entry(identifier.name.to_string())
+            .or_insert(Origin::Local);
+    }
 }
 
 fn declared_name(declaration: &Declaration<'_>, origins: &mut HashMap<String, Origin>) {
@@ -403,6 +420,17 @@ pub(crate) mod tests {
             "const Helper = () => null;\nexport const A = () => <Helper />;",
             "export const Helper = () => null;\nexport const A = () => <Helper />;",
             "class Helper {}\nexport const A = () => <Helper />;",
+        ] {
+            let errors = check_source(source, &[]);
+            assert!(errors.is_empty(), "{source:?} -> {errors:?}");
+        }
+    }
+
+    #[test]
+    fn a_component_declared_inside_another_component_is_local() {
+        for source in [
+            "export const A = () => { const Helper = () => null; return <Helper />; };",
+            "export const A = (Helper) => <Helper />;",
         ] {
             let errors = check_source(source, &[]);
             assert!(errors.is_empty(), "{source:?} -> {errors:?}");

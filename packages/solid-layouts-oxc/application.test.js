@@ -15,6 +15,7 @@ const { dirname, join, resolve } = require("node:path");
 const {
   compileApplication,
   compileApplicationFile,
+  pluginSolidLayoutsApplication,
 } = require("./application.js");
 
 const temporary = [];
@@ -61,6 +62,39 @@ test("resolves an exact component index from C and accepts its public export", (
   expect(result.failed).toBe(false);
   expect(result.changed).toBe(true);
   expect(result.code).toContain(application.layoutSources[0].resolved);
+});
+
+test("resolves a Layout package without a package.json export", () => {
+  const { root, packageRoot } = fixture();
+  const copy = makePackageEditable(root, packageRoot);
+  const packageJsonPath = join(copy, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  delete packageJson.exports["./package.json"];
+  writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+  const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
+
+  expect(application.sources[0].packageJsonPath.endsWith("/editable-package/package.json")).toBe(true);
+  expect(application.layoutSources[0].exports).toContain("Icon");
+});
+
+test("resolves the import-only solid-layouts runtime for the bundler alias", () => {
+  const { root } = fixture();
+  symlinkSync(
+    resolve(__dirname, "../solid-layouts"),
+    join(root, "node_modules/solid-layouts"),
+    "dir",
+  );
+  let bundlerConfig;
+
+  pluginSolidLayoutsApplication({ layouts: ["@pathscale/test-ui"] }).setup({
+    context: { rootPath: root },
+    modifyBundlerChain(config) {
+      bundlerConfig = config;
+    },
+  });
+
+  expect(bundlerConfig.order).toBe("post");
 });
 
 test("accepts another public component exported by C", () => {
