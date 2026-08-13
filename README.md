@@ -4,6 +4,8 @@ Solid Layouts separates a Solid component's presentation recipe and markup from 
 
 Compilation is required. Authored `.layout.tsx` is template syntax, not ordinary TSX, and there is no runtime or graceful fallback when the compiler cannot match a template.
 
+JSX names are case-sensitive. `<button>` is a native HTML element and bypasses Layout resolution; `<Button>` is an imported Layout component and must match the exact export recorded in C. Because lowercase `<button>` is valid HTML, E cannot assume it was intended to mean `<Button>`.
+
 ## Start here
 
 - [Complete producer and application example](./docs/getting-started.md)
@@ -41,7 +43,7 @@ If B cannot match an authored template to its recipe, B fails. If E cannot resol
 
 There are currently two concrete sources:
 
-1. [`Test-UI/`](./Test-UI) in this repository is the working two-component producer fixture. It contains Icon and Button extracted from the larger Pathscale migration and is a small complete A+B→C example.
+1. [`Test-UI/`](./Test-UI) in this repository is the working four-component producer fixture. It contains Icon, Button, Flex, and Chip extracted from the larger Pathscale migration and is a small complete A+B→C example.
 2. [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221), branch `feat/icon-layout-port`, is the full Layout-authored migration. It is source A, not a package C that an application can consume directly. It still needs to be wired to the independent library compiler in this repository before it is publishable.
 
 To inspect the full authored UI:
@@ -52,7 +54,7 @@ git clone --branch feat/icon-layout-port https://github.com/pathscale/ui.git UI
 
 An application must never alias imports to raw `UI/src`. The application consumes the C bundle produced by B, normally as `@pathscale/ui` from npm. Until the full library wiring is complete, use `Test-UI/bundle` for the working proof.
 
-## Run the complete two-component proof
+## Run the complete four-component proof
 
 The packages are not published on npm yet. The current reproducible path uses this checkout and the system Bun and Rust toolchains:
 

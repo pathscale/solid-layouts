@@ -57,7 +57,7 @@ git clone https://github.com/pathscale/solid-layouts.git
 git clone --branch feat/icon-layout-port https://github.com/pathscale/ui.git UI
 ```
 
-`UI/` is role A for the eventual full library. The runnable example below uses `solid-layouts/Test-UI` as a controlled two-component A.
+`UI/` is role A for the eventual full library. The runnable example below uses `solid-layouts/Test-UI` as a controlled four-component A.
 
 ## Producer: author components as A
 
@@ -81,6 +81,33 @@ export const icon = recipe({
 The recipe declares what can affect presentation and which slots the Layout may render. B compiles its static lookup table once; the runtime does not reconstruct the table for every Icon instance.
 
 Presentation parameters belong in the producer recipe and Layout, not in application CSS. For example, the Test-UI Button exposes `variant`, `size`, `squareSize`, `justify`, and `radius`; a consumer can request `<Button variant="outline" squareSize={32}>` without rebuilding Button geometry in a local stylesheet. Application CSS should remain only for relationships the component cannot own, such as revealing a child control when its parent row is hovered.
+
+Flex spacing follows the same rule. Application code uses named Layout parameters:
+
+```tsx
+<Flex
+  as="div"
+  align="start"
+  gap="md"
+  paddingInline="md"
+  paddingBlock="md"
+>
+  {children}
+</Flex>
+```
+
+The recipe in A owns the concrete utility classes and spacing values. Strings such as `px-3.5`, `py-3`, and `gap-4` must not be repeated in D.
+
+### JSX names are case-sensitive
+
+Solid TSX and the application compiler distinguish intrinsic elements from component bindings by case:
+
+```tsx
+<button>Native HTML</button>
+<Button>Compiled Layout component</Button>
+```
+
+`<button>` is valid native HTML and deliberately bypasses Layout resolution. `<Button>` resolves the exact imported export from C and is processed by E. If an author accidentally writes `<button>` when they intended `<Button>`, E cannot infer that intent or report a missing template because the lowercase element is already valid HTML. Use the exact exported capitalization; custom linting can enforce project rules for controls that must use the UI package.
 
 ### 2. Author the Layout template
 
@@ -325,7 +352,7 @@ bun install --frozen-lockfile
 bun run build
 ```
 
-Chuzz imports Icon and Button from `@pathscale/test-ui`; its other components continue to come from the existing `@pathscale/ui`. The Button migration replaces the raw controls in `TitleBar.tsx` and `SidePanel.tsx`, preserving their event handlers and application-specific CSS while making the component body changes visible in review.
+Chuzz imports Icon, Button, Flex, and Chip from `@pathscale/test-ui`. The Button migration replaces native controls across the title bar, toolbar, inspector, settings, theme picker, and application shell. Stable presentation is expressed through Layout parameters; application CSS remains only for component relationships or application-specific structures the reusable component cannot own.
 
 ## Expected failures
 

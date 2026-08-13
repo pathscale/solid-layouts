@@ -29,7 +29,7 @@ This document focuses on B and the concrete C it produces. The initial E impleme
 
 ## A: the authored Test-UI
 
-`Test-UI/src` contains two components copied from the larger UI migration: Icon and Button. The full authored source is [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221); it is A and must be compiled before an application can consume it. `Test-UI` keeps the proof small enough that all of C can be reviewed directly while exercising multiple public exports, slots, variants, HTML passthrough, and event handlers.
+`Test-UI/src` contains four components copied from the larger UI migration: Icon, Button, Flex, and Chip. The full authored source is [`pathscale/ui` PR #221](https://github.com/pathscale/ui/pull/221); it is A and must be compiled before an application can consume it. `Test-UI` keeps the proof small enough that all of C can be reviewed directly while exercising multiple public exports, slots, variants, HTML passthrough, and event handlers.
 
 The important source is `Test-UI/src/components/icon/Icon.layout.tsx`. It intentionally has this shape:
 
