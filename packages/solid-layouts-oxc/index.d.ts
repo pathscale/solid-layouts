@@ -34,6 +34,7 @@ export type ProjectFile = {
 export type ProjectDiagnostic = Diagnostic & {
   filename: string;
   rule: string;
+  suggestion?: string;
 };
 
 export type ApplicationSource = {

@@ -63,10 +63,13 @@ It reports high-value migration candidates:
 | Rule | What it identifies |
 | --- | --- |
 | `application-layout-utilities` | Spacing, sizing, or alignment classes passed to an existing Layout component |
+| `application-typography-override` | Typography or tone classes passed to an existing Layout component |
 | `application-manual-classes` | Other manual class overrides on an existing Layout component |
 | `application-state-classes` | Dynamic class expressions and Solid `classList` state |
-| `application-native-control` | Styled native controls that may duplicate a reusable component recipe |
-| `application-repeated-classes` | An exact static class signature repeated at least three times across the project |
+| `application-native-control` | Styled native controls that may duplicate a reusable component recipe; hidden implementation inputs are excluded |
+| `application-repeated-layout-utilities` | A layout utility signature repeated at least three times |
+| `application-repeated-typography` | A typography or tone signature repeated at least three times |
+| `application-repeated-classes` | Another exact static class signature repeated at least three times across the project |
 
 The configured package manifest identifies components that already have Layout
 recipes. Aliases and compound calls such as `Card.Body` resolve through their
@@ -78,6 +81,13 @@ The report is a migration inventory: each warning points to presentation that
 should become an existing semantic recipe parameter or motivate a new recipe.
 Because the report is advisory, teams can track its count as migration progress
 without making existing application code invalid.
+
+Every porting diagnostic also carries a structured `suggestion` and the CLI
+prints it beneath the warning. Suggestions describe the safe semantic migration;
+they are not automatic text edits. Until a package manifest publishes its recipe
+axis schema, the analyzer cannot honestly claim that a particular prop already
+exists, so it says to use the semantic prop when present or add the missing axis
+to the owning recipe.
 
 Any number of Layout libraries can participate:
 

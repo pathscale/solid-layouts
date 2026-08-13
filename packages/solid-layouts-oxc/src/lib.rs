@@ -74,6 +74,7 @@ mod binding {
         pub rule: String,
         pub severity: String,
         pub message: String,
+        pub suggestion: Option<String>,
         pub line: u32,
         pub column: u32,
     }
@@ -103,6 +104,7 @@ mod binding {
                     rule: item.rule.to_owned(),
                     severity: format!("{:?}", item.diagnostic.severity).to_lowercase(),
                     message: item.diagnostic.message,
+                    suggestion: item.suggestion,
                     line: at.line,
                     column: at.column,
                 }
@@ -139,6 +141,7 @@ mod binding {
                     rule: item.rule.to_owned(),
                     severity: format!("{:?}", item.diagnostic.severity).to_lowercase(),
                     message: item.diagnostic.message,
+                    suggestion: item.suggestion,
                     line: at.line,
                     column: at.column,
                 }

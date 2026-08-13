@@ -108,7 +108,7 @@ import {
 
 The equivalent command-line entry points are `solid-layouts-library` and `solid-layouts-application`. The hosts always select `library` or `application` mode explicitly; mode is never inferred from a filename or package.
 
-The shared OXC linter is `solid-layouts-lint`. Use normal mode for Layout library contracts and `solid-layouts-lint --porting --layouts @pathscale/ui` for a warning-only inventory of ordinary SolidJS application code. Porting mode finds manual Layout overrides, state-driven classes, styled native controls, and repeated static class signatures; it does not interpret application TSX as Layout template syntax.
+The shared OXC linter is `solid-layouts-lint`. Use normal mode for Layout library contracts and `solid-layouts-lint --porting --layouts @pathscale/ui` for a warning-only inventory of ordinary SolidJS application code. Porting mode finds manual Layout overrides, state-driven classes, styled native controls, and repeated static class signatures categorized as layout utilities, typography/tone, or compound recipe candidates; it does not interpret application TSX as Layout template syntax.
 
 ## Tests
 
@@ -117,7 +117,7 @@ Yes, all three layers have tests:
 | Layer | Coverage | Command |
 | --- | ---: | --- |
 | Runtime | 143 Bun tests plus TypeScript | `cd packages/solid-layouts && bun run test && bun run typecheck` |
-| Native compiler | 55 Rust unit/conformance tests | `cd packages/solid-layouts-oxc && cargo test --workspace` |
+| Native compiler | 56 Rust unit/conformance tests | `cd packages/solid-layouts-oxc && cargo test --workspace` |
 | Library host | 3 package-production tests | `cd packages/solid-layouts-oxc && bun run test:library` |
 | Application host | 9 package-resolution, source-rewrite, and hard-failure tests | `cd packages/solid-layouts-oxc && bun run test:application` |
 

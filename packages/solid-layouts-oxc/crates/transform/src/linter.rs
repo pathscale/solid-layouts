@@ -26,6 +26,7 @@ pub struct ProjectDiagnostic {
     pub filename: String,
     pub source: String,
     pub rule: &'static str,
+    pub suggestion: Option<String>,
     pub diagnostic: Diagnostic,
 }
 
@@ -287,6 +288,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                 filename: file.filename.clone(),
                 source: file.source.clone(),
                 rule: "syntax",
+                suggestion: None,
                 diagnostic: Diagnostic::error(error.to_string(), Span::new(0, 0)),
             }));
             continue;
@@ -299,6 +301,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "recipe-static",
+                    suggestion: None,
                     diagnostic,
                 }),
         );
@@ -308,6 +311,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule,
+                    suggestion: None,
                     diagnostic,
                 }
             }));
@@ -342,6 +346,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "recipe-import",
+                    suggestion: None,
                     diagnostic: Diagnostic::error(
                         format!("recipe `{recipe_name}` is not imported"),
                         layout.span,
@@ -354,6 +359,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "recipe-source",
+                    suggestion: None,
                     diagnostic: Diagnostic::error(
                         format!("recipe source `{module}` cannot be resolved"),
                         layout.span,
@@ -366,6 +372,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "recipe-export",
+                    suggestion: None,
                     diagnostic: Diagnostic::error(
                         format!("`{module}` does not export a static recipe named `{export_name}`"),
                         layout.span,
@@ -393,6 +400,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "slot-computed",
+                    suggestion: None,
                     diagnostic: Diagnostic::error(
                         "computed slot access cannot be validated statically",
                         *span,
@@ -405,6 +413,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                         filename: file.filename.clone(),
                         source: file.source.clone(),
                         rule: "slot-undeclared",
+                        suggestion: None,
                         diagnostic: Diagnostic::error(
                             format!(
                                 "rendered slot `{}` is not declared by `{recipe_name}`",
@@ -421,6 +430,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                         filename: file.filename.clone(),
                         source: file.source.clone(),
                         rule: "slot-unused",
+                        suggestion: None,
                         diagnostic: Diagnostic::error(
                             format!("declared slot `{slot}` is not rendered by `{recipe_name}`"),
                             layout.span,
@@ -434,6 +444,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "legacy-template",
+                    suggestion: None,
                     diagnostic: Diagnostic::warning(
                         "legacy component-shaped Layout keeps presentation in component code",
                         layout.span,
@@ -449,6 +460,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
                     rule: "manual-classes",
+                    suggestion: None,
                     diagnostic: Diagnostic::warning(
                         "manual class composition belongs in the recipe",
                         *span,
@@ -490,6 +502,7 @@ struct ApplicationClasses<'a> {
 struct PortingFinding {
     rule: &'static str,
     message: String,
+    suggestion: String,
     span: Span,
 }
 
@@ -498,28 +511,81 @@ struct StaticClassFinding {
     span: Span,
 }
 
+fn is_layout_class(class: &str) -> bool {
+    let class = class.rsplit(':').next().unwrap_or(class);
+    [
+        "p-", "px-", "py-", "pt-", "pr-", "pb-", "pl-", "m-", "mx-", "my-", "mt-", "mr-", "mb-",
+        "ml-", "gap-", "space-x-", "space-y-", "w-", "h-", "min-w-", "min-h-", "max-w-", "max-h-",
+        "flex-", "basis-", "items-", "justify-", "self-", "content-", "place-",
+    ]
+    .iter()
+    .any(|prefix| class.starts_with(prefix))
+}
+
 fn is_spacing_class(value: &str) -> bool {
-    value.split_whitespace().any(|class| {
-        let class = class.rsplit(':').next().unwrap_or(class);
-        [
-            "p-", "px-", "py-", "pt-", "pr-", "pb-", "pl-", "m-", "mx-", "my-", "mt-", "mr-",
-            "mb-", "ml-", "gap-", "space-x-", "space-y-", "w-", "h-", "min-w-", "min-h-", "max-w-",
-            "max-h-", "items-", "justify-", "self-",
-        ]
+    value.split_whitespace().any(is_layout_class)
+}
+
+fn is_typography_token(class: &str) -> bool {
+    let class = class.rsplit(':').next().unwrap_or(class);
+    ["text-", "font-", "leading-", "tracking-"]
         .iter()
         .any(|prefix| class.starts_with(prefix))
-    })
+}
+
+fn is_typography_class(value: &str) -> bool {
+    value.split_whitespace().any(is_typography_token)
+}
+
+fn is_hidden_implementation(value: &str) -> bool {
+    let classes = value.split_whitespace().collect::<Vec<_>>();
+    !classes.is_empty()
+        && classes
+            .iter()
+            .all(|class| matches!(*class, "hidden" | "sr-only"))
 }
 
 fn class_finding(attribute: &JSXAttribute<'_>) -> PortingFinding {
     match &attribute.value {
         Some(JSXAttributeValue::StringLiteral(value)) if is_spacing_class(value.value.as_str()) => {
+            let layout = value
+                .value
+                .split_whitespace()
+                .filter(|class| is_layout_class(class))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let appearance = value
+                .value
+                .split_whitespace()
+                .filter(|class| !is_layout_class(class))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let suggestion = if appearance.is_empty() {
+                format!(
+                    "replace `{layout}` with semantic layout props; if a required value is missing, add it once to the component recipe"
+                )
+            } else {
+                format!(
+                    "replace layout utilities `{layout}` with semantic layout props and move `{appearance}` into an appropriate variant, tone, or surface recipe axis"
+                )
+            };
             PortingFinding {
                 rule: "application-layout-utilities",
                 message: "spacing, sizing, or alignment on a Layout component should be a semantic recipe parameter".to_owned(),
+                suggestion,
                 span: attribute.span,
             }
         }
+        Some(JSXAttributeValue::StringLiteral(value))
+            if is_typography_class(value.value.as_str()) => PortingFinding {
+                rule: "application-typography-override",
+                message: "typography or tone on a Layout component should be a semantic recipe parameter".to_owned(),
+                suggestion: format!(
+                    "replace `{}` with semantic size, weight, and tone props; add any missing axis to the owning recipe",
+                    value.value
+                ),
+                span: attribute.span,
+            },
         Some(JSXAttributeValue::ExpressionContainer(container))
             if matches!(
                 container.expression,
@@ -530,11 +596,13 @@ fn class_finding(attribute: &JSXAttribute<'_>) -> PortingFinding {
             ) => PortingFinding {
                 rule: "application-state-classes",
                 message: "dynamic classes on a Layout component should be a declared presentation or state axis".to_owned(),
+                suggestion: "pass semantic state such as active, selected, pressed, or disabled and map its visual values in the recipe".to_owned(),
                 span: attribute.span,
             },
         _ => PortingFinding {
             rule: "application-manual-classes",
             message: "manual class override on a Layout component should be a semantic recipe parameter".to_owned(),
+            suggestion: "use an existing variant, tone, size, or layout prop; if none represents this presentation, add a semantic axis to the owning recipe".to_owned(),
             span: attribute.span,
         },
     }
@@ -576,17 +644,25 @@ impl<'a> Visit<'a> for ApplicationClasses<'a> {
                 continue;
             };
             if name.name == "class" || name.name == "className" {
-                if let Some(signature) = static_class_signature(attribute) {
+                let static_signature = static_class_signature(attribute);
+                let hidden_implementation = static_signature
+                    .as_deref()
+                    .is_some_and(is_hidden_implementation);
+                if let Some(signature) = static_signature.filter(|_| !hidden_implementation) {
                     self.static_classes.push(StaticClassFinding {
                         signature,
                         span: attribute.span,
                     });
                 }
-                if is_native_control {
+                if is_native_control && !hidden_implementation {
                     self.found.push(PortingFinding {
                         rule: "application-native-control",
                         message: "styled native control may duplicate a reusable Layout component"
                             .to_owned(),
+                        suggestion: format!(
+                            "replace the styled native `{}` with a Layout component, or add a reusable recipe while preserving its behavior props",
+                            root.unwrap_or("control")
+                        ),
                         span: attribute.span,
                     });
                 }
@@ -595,6 +671,7 @@ impl<'a> Visit<'a> for ApplicationClasses<'a> {
                         rule: "application-state-classes",
                         message: "dynamic classes should be a declared presentation or state axis"
                             .to_owned(),
+                        suggestion: "replace the class expression with semantic state props and map those states in the recipe".to_owned(),
                         span: attribute.span,
                     });
                 } else if is_layout {
@@ -604,6 +681,7 @@ impl<'a> Visit<'a> for ApplicationClasses<'a> {
                 self.found.push(PortingFinding {
                     rule: "application-state-classes",
                     message: "classList state should be a declared state axis".to_owned(),
+                    suggestion: "replace classList keys with semantic state props and map each visual state in the recipe".to_owned(),
                     span: attribute.span,
                 });
             }
@@ -663,6 +741,7 @@ pub fn lint_application(
             filename: file.filename.clone(),
             source: file.source.clone(),
             rule: finding.rule,
+            suggestion: Some(finding.suggestion),
             diagnostic: Diagnostic::warning(finding.message, finding.span),
         }));
     }
@@ -672,14 +751,40 @@ pub fn lint_application(
         }
         let (file_index, span) = occurrences[0];
         let file = &files[file_index];
+        let (rule, opportunity, suggestion) = if is_spacing_class(&signature) {
+            (
+                "application-repeated-layout-utilities",
+                "a repeated layout utility should become a semantic recipe parameter",
+                format!(
+                    "replace repeated `{signature}` call-site classes with semantic layout props and add any missing values to the owning recipes"
+                ),
+            )
+        } else if is_typography_class(&signature) {
+            (
+                "application-repeated-typography",
+                "a repeated typography or tone signature should become a semantic text variant",
+                format!(
+                    "replace repeated `{signature}` classes with a named typography or tone variant on Text, Label, or the owning recipe"
+                ),
+            )
+        } else {
+            (
+                "application-repeated-classes",
+                "a repeated compound signature may be a reusable recipe",
+                format!(
+                    "extract repeated `{signature}` presentation into a named recipe or reusable Layout component"
+                ),
+            )
+        };
         diagnostics.push(ProjectDiagnostic {
             filename: file.filename.clone(),
             source: file.source.clone(),
-            rule: "application-repeated-classes",
+            rule,
+            suggestion: Some(suggestion),
             diagnostic: Diagnostic::warning(
                 format!(
-                    "the same class signature occurs {} times and may be a reusable recipe: `{signature}`",
-                    occurrences.len()
+                    "the same class signature occurs {} times; {opportunity}: `{signature}`",
+                    occurrences.len(),
                 ),
                 span,
             ),
@@ -819,9 +924,9 @@ export const Button: Layout<typeof button> = () => <button class={twMerge("butto
 
     #[test]
     fn porting_mode_only_warns_for_classes_on_configured_layout_imports() {
-        let source = r#"import { Button, Icon as StatusIcon } from "@acme/ui";
+        let source = r#"import { Button, Icon as StatusIcon, Label } from "@acme/ui";
 import { Widget } from "elsewhere";
-export const View = () => <div class="page"><Button class="w-full" /><StatusIcon className="red" /><Widget class="ok" /></div>;
+export const View = () => <div class="page"><Button class="w-full" /><StatusIcon className="red" /><Label class="text-error text-xs" /><Widget class="ok" /></div>;
 "#;
         let diagnostics = lint_application(
             &[ProjectFile {
@@ -830,16 +935,19 @@ export const View = () => <div class="page"><Button class="w-full" /><StatusIcon
             }],
             &[ApplicationSource {
                 module: "@acme/ui".to_owned(),
-                exports: ["Button".to_owned(), "Icon".to_owned()]
+                exports: ["Button".to_owned(), "Icon".to_owned(), "Label".to_owned()]
                     .into_iter()
                     .collect(),
             }],
         );
-        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics.len(), 3);
         assert!(diagnostics.iter().all(|item| matches!(
             item.rule,
-            "application-layout-utilities" | "application-manual-classes"
+            "application-layout-utilities"
+                | "application-manual-classes"
+                | "application-typography-override"
         )));
+        assert!(diagnostics.iter().all(|item| item.suggestion.is_some()));
     }
 
     #[test]
@@ -859,11 +967,12 @@ export const View = () => <div class="page"><Button class="w-full" /><StatusIcon
             }],
             &[],
         );
-        assert!(
-            diagnostics
-                .iter()
-                .any(|item| item.rule == "application-repeated-classes")
-        );
+        assert!(diagnostics.iter().any(|item| matches!(
+            item.rule,
+            "application-repeated-classes"
+                | "application-repeated-layout-utilities"
+                | "application-repeated-typography"
+        )));
         assert!(
             diagnostics
                 .iter()
@@ -876,5 +985,19 @@ export const View = () => <div class="page"><Button class="w-full" /><StatusIcon
                 .count(),
             2
         );
+        assert!(diagnostics.iter().all(|item| item.suggestion.is_some()));
+    }
+
+    #[test]
+    fn porting_mode_ignores_hidden_native_implementation_inputs() {
+        let source = r#"export const Upload = () => <input type="file" class="hidden" />;"#;
+        let diagnostics = lint_application(
+            &[ProjectFile {
+                filename: "/app/Upload.tsx".to_owned(),
+                source: source.to_owned(),
+            }],
+            &[],
+        );
+        assert!(diagnostics.is_empty());
     }
 }

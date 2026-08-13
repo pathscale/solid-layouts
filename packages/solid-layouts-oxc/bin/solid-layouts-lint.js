@@ -25,6 +25,7 @@ if (!args.includes("--porting")) {
   });
   for (const item of result.diagnostics) {
     console.warn(`${item.filename}:${item.line}:${item.column}: warning[${item.rule}]: ${item.message}`);
+    if (item.suggestion) console.warn(`  suggested fix: ${item.suggestion}`);
   }
   console.log(`solid-layouts porting report: ${result.diagnostics.length} warning(s)`);
 }
