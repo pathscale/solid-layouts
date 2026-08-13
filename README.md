@@ -13,6 +13,7 @@ JSX names are case-sensitive. `<button>` is a native HTML element and bypasses L
 - [Compiler modes, public entry points, failures, and the Chuzz integration](./docs/compiler-modes-and-chuzz-application-plan.md)
 - [Porting from Vue](./docs/porting-from-vue.md)
 - [Layout linting, porting reports, baselines, and user-owned recipes](./docs/linting-and-porting.md)
+- [Releasing with npm Trusted Publishing](./docs/releasing.md)
 - [Original design document](https://github.com/pathscale/ui/blob/layouts/docs/layouts.md)
 
 ## The pipeline
