@@ -1,6 +1,6 @@
 {
   "name": "solid-layouts-oxc",
-  "version": "0.1.6",
+  "version": "0.1.5",
   "description": "The Layouts pre-pass for SolidJS, built on oxc",
   "license": "MIT",
   "type": "commonjs",
