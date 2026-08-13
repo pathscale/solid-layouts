@@ -31,6 +31,16 @@
       "layoutExport": "FlexLayout",
       "propsType": "FlexProps",
       "typeExports": ["FlexProps"]
+    },
+    {
+      "name": "Chip",
+      "entry": "index.ts",
+      "recipe": "components/chip/Chip.recipe.ts",
+      "recipeExport": "chip",
+      "layout": "components/chip/Chip.layout.tsx",
+      "layoutExport": "ChipLayout",
+      "propsType": "ChipProps",
+      "typeExports": ["ChipProps", "ChipVariant", "ChipColor", "ChipSize"]
     }
   ]
 }

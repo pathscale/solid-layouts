@@ -23,6 +23,13 @@
       "recipeExport": "flex",
       "layout": "./components/flex/Flex.generated.tsx",
       "layoutExport": "FlexLayout"
+    },
+    "Chip": {
+      "entry": "./index.ts",
+      "recipe": "./components/chip/Chip.recipe.ts",
+      "recipeExport": "chip",
+      "layout": "./components/chip/Chip.generated.tsx",
+      "layoutExport": "ChipLayout"
     }
   }
 }

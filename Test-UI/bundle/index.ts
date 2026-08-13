@@ -15,3 +15,8 @@ import { flex } from "./components/flex/Flex.recipe";
 import type { FlexProps as __FlexProps } from "./components/flex/Flex.generated";
 export const Flex = __defineLayoutComponent({ recipe: flex, layout: FlexLayout }) as __LayoutComponent<__FlexProps>;
 export type { FlexProps } from "./components/flex/Flex.generated";
+import { ChipLayout } from "./components/chip/Chip.generated";
+import { chip } from "./components/chip/Chip.recipe";
+import type { ChipProps as __ChipProps } from "./components/chip/Chip.generated";
+export const Chip = __defineLayoutComponent({ recipe: chip, layout: ChipLayout }) as __LayoutComponent<__ChipProps>;
+export type { ChipProps, ChipVariant, ChipColor, ChipSize } from "./components/chip/Chip.generated";
