@@ -1,23 +1,15 @@
-export { cx } from "./cx";
+import { cx } from "./cx";
+import { configureUI, resetUIConfig } from "./defaults";
+import { UIDefaults, compound, defineComponent } from "./component";
+import { recipe } from "./recipe";
+
+export { UIDefaults, compound, configureUI, cx, defineComponent, recipe, resetUIConfig };
 // `./ids` is deliberately not re-exported. Instance numbering is the runtime's
 // own bookkeeping: nothing outside it should mint an id, and exporting the
 // counter invites someone to reset it in the middle of a render.
-export { recipe, type Recipe } from "./recipe";
-export {
-  configureUI,
-  resetUIConfig,
-  type ComponentDefaults,
-  type UIConfig,
-} from "./defaults";
-export {
-  UIDefaults,
-  compound,
-  defineComponent,
-  type ComponentProps,
-  type DefineComponentConfig,
-  type Layout,
-  type LayoutStable,
-} from "./component";
+export type { Recipe } from "./recipe";
+export type { ComponentDefaults, UIConfig } from "./defaults";
+export type { ComponentProps, DefineComponentConfig, Layout, LayoutStable } from "./component";
 export type {
   PropsOf,
   RecipeConfig,
