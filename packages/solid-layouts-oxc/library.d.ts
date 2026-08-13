@@ -1,6 +1,8 @@
 export type SolidLayoutsLibraryOptions = {
   root?: string;
   config?: string;
+  source?: string;
+  output?: string;
   check?: boolean;
   updateBaseline?: boolean;
 };

@@ -69,12 +69,12 @@ The existing static recipe compiler is also part of B. It inserts the `_layouts`
 
 `packages/solid-layouts-oxc/library.js` is the package-level compiler. It:
 
-1. Reads `layouts.library.json`.
-2. Walks the authored source directory.
+1. Walks the authored `src` directory and discovers `*.layout.tsx` files.
+2. Derives each public component, recipe binding, Layout export, props type, and type exports from authored source.
 3. Compiles `.layout.tsx` to `.generated.tsx`.
 4. Compiles static `.recipe.ts` files.
 5. Copies ordinary source and CSS.
-6. Rejects missing configured recipes.
+6. Rejects missing, aliased, or ambiguous recipe/Layout relationships.
 7. Rejects rendered slots not declared by the recipe.
 8. Verifies generated files parse as TSX.
 9. Generates package entries with the application-compiler boundary.
@@ -87,7 +87,9 @@ The same operation is available in three forms:
 - `pluginSolidLayoutsLibrary()` for an Rsbuild/Rslib host
 - the `solid-layouts-library` CLI
 
-The compiler is configuration-driven because the public component export, recipe binding, and Layout binding are package API decisions. `Test-UI/layouts.library.json` makes those joins explicit and gives the compiler exact paths to validate.
+The authored source is the package contract. `Name.layout.tsx`, its `Layout<typeof recipe, Props>` annotation, its relative recipe import, and its `NameLayout` export contain everything B needs. B derives the join once and emits it into C's generated manifest. It never silently guesses or falls back when the source relationship is incomplete.
+
+`layouts.library.json` is optional and reserved for nonstandard layouts or adjacent source-mode generation. `Test-UI` and generated private libraries use convention-based discovery without it.
 
 ## C: the generated Layout UI bundle
 

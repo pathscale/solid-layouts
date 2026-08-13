@@ -103,14 +103,14 @@ The package root exports the existing low-level native API for compiler-host int
 
 Configuration also does not select a mode:
 
-- `layouts.library.json` describes inputs and outputs after the library entry point has selected library mode.
+- The library entry point selects library mode. It discovers the conventional `src` → `bundle` package automatically; optional config only overrides that contract.
 - Application plugin options describe Layout package sources after the application entry point has selected application mode.
 
 ## Library mode: A + B -> C
 
 Library mode owns package production. It:
 
-1. Reads the library configuration.
+1. Discovers Layout templates and their recipe imports from authored source.
 2. Parses authored recipes and Layout templates.
 3. Rewrites Layout template syntax into valid generated Solid TSX.
 4. Compiles static recipe lookup data.

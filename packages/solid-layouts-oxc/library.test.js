@@ -25,7 +25,6 @@ function fixture() {
   temporary.push(directory);
   const source = resolve(__dirname, "../../Test-UI");
   cpSync(join(source, "package.json"), join(directory, "package.json"));
-  cpSync(join(source, "layouts.library.json"), join(directory, "layouts.library.json"));
   cpSync(join(source, "src"), join(directory, "src"), { recursive: true });
   return directory;
 }
@@ -98,9 +97,27 @@ test("fails when a rendered slot is absent from the recipe", () => {
   );
 });
 
-test("fails when the configured recipe source is missing", () => {
+test("discovers components without an authored library manifest", () => {
+  const root = fixture();
+  expect(() => readFileSync(join(root, "layouts.library.json"))).toThrow();
+
+  const result = compileLibrary({ root });
+
+  expect(Object.keys(result.manifest.components)).toEqual(["Button", "Chip", "Flex", "Icon"]);
+});
+
+test("fails when a discovered recipe source is missing", () => {
   const root = fixture();
   rmSync(join(root, "src/components/icon/Icon.recipe.ts"));
 
-  expect(() => compileLibrary({ root })).toThrow("recipe not found");
+  expect(() => compileLibrary({ root })).toThrow("recipe import not found");
+});
+
+test("fails when the Layout export cannot be derived", () => {
+  const root = fixture();
+  const layoutPath = join(root, "src/components/icon/Icon.layout.tsx");
+  const layout = readFileSync(layoutPath, "utf8").replace("IconLayout", "PublicIconLayout");
+  writeFileSync(layoutPath, layout);
+
+  expect(() => compileLibrary({ root })).toThrow("expected public Layout export IconLayout");
 });

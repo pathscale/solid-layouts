@@ -10,7 +10,7 @@ const {
   statSync,
   writeFileSync,
 } = require("node:fs");
-const { dirname, extname, relative, resolve, sep } = require("node:path");
+const { basename, dirname, relative, resolve, sep } = require("node:path");
 const { lintProject, transform } = require("./index.js");
 
 const FORMAT = "solid-layouts-library-v2";
@@ -23,6 +23,19 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function readLibraryConfig(root, options = {}) {
+  const configPath = resolve(root, options.config || "layouts.library.json");
+  if (existsSync(configPath)) return { configPath, config: readJson(configPath) };
+  if (options.config) throw new Error(`Layout library config not found: ${configPath}`);
+  return {
+    configPath: undefined,
+    config: {
+      source: options.source || "src",
+      output: options.output || "bundle",
+    },
+  };
+}
+
 function filesBelow(directory) {
   const files = [];
   for (const entry of readdirSync(directory)) {
@@ -31,6 +44,98 @@ function filesBelow(directory) {
     else files.push(path);
   }
   return files.sort();
+}
+
+function portable(path) {
+  return path.split(sep).join("/");
+}
+
+function resolveModule(fromFile, specifier) {
+  if (!specifier.startsWith(".")) {
+    throw new Error(`${fromFile}: Layout recipes must be imported through a relative path`);
+  }
+  const candidate = resolve(dirname(fromFile), specifier);
+  for (const suffix of ["", ".ts", ".tsx", ".js", ".jsx"]) {
+    const path = `${candidate}${suffix}`;
+    if (existsSync(path)) return path;
+  }
+  throw new Error(`${fromFile}: recipe import not found: ${specifier}`);
+}
+
+function exportedTypes(source) {
+  const names = new Set();
+  for (const match of source.matchAll(/\bexport\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/g)) {
+    names.add(match[1]);
+  }
+  for (const match of source.matchAll(/\bexport\s+type\s*\{([^}]+)\}/g)) {
+    for (const item of match[1].split(",")) {
+      const name = item.trim().split(/\s+as\s+/).at(-1);
+      if (name) names.add(name);
+    }
+  }
+  return [...names];
+}
+
+function discoverComponents(sourceRoot) {
+  const layouts = filesBelow(sourceRoot).filter((path) => /\.layout\.(?:tsx|jsx)$/.test(path));
+  const components = layouts.map((layout) => {
+    const source = readFileSync(layout, "utf8");
+    const name = basename(layout).replace(/\.layout\.(?:tsx|jsx)$/, "");
+    const annotations = [...source.matchAll(
+      /\bLayout\s*<\s*typeof\s+([A-Za-z_$][\w$]*)(?:\s*,\s*([A-Za-z_$][\w$]*))?\s*>/g,
+    )];
+    if (annotations.length !== 1) {
+      throw new Error(`${layout}: expected exactly one Layout<typeof recipe, Props> annotation`);
+    }
+    const recipeExport = annotations[0][1];
+    const propsType = annotations[0][2];
+    const imports = [...source.matchAll(
+      /import\s+\{([^}]+)\}\s+from\s+["']([^"']+)["']/g,
+    )];
+    const recipeImports = [];
+    for (const match of imports) {
+      for (const item of match[1].split(",")) {
+        const [imported, local = imported] = item.trim().split(/\s+as\s+/);
+        if (local === recipeExport) recipeImports.push({ imported, specifier: match[2] });
+      }
+    }
+    if (recipeImports.length !== 1 || recipeImports[0].imported !== recipeExport) {
+      throw new Error(`${layout}: ${recipeExport} must have one unaliased recipe import`);
+    }
+    const recipe = resolveModule(layout, recipeImports[0].specifier);
+    if (!/\.recipe\.(?:ts|tsx|js|jsx)$/.test(recipe)) {
+      throw new Error(`${layout}: ${recipeExport} must come from a *.recipe module`);
+    }
+    const layoutExport = `${name}Layout`;
+    if (!new RegExp(`\\bexport\\s+const\\s+${layoutExport}\\b`).test(source)) {
+      throw new Error(`${layout}: expected public Layout export ${layoutExport}`);
+    }
+    const discoveredTypes = exportedTypes(source);
+    if (propsType && !discoveredTypes.includes(propsType)) {
+      throw new Error(`${layout}: props type ${propsType} must be exported`);
+    }
+    const typeExports = propsType
+      ? [propsType, ...discoveredTypes.filter((name) => name !== propsType)]
+      : discoveredTypes;
+    return {
+      name,
+      entry: "index.ts",
+      recipe: portable(relative(sourceRoot, recipe)),
+      recipeExport,
+      layout: portable(relative(sourceRoot, layout)),
+      layoutExport,
+      propsType,
+      typeExports,
+    };
+  });
+  const names = new Set();
+  for (const component of components) {
+    if (names.has(component.name)) {
+      throw new Error(`Layout library declares component ${component.name} more than once`);
+    }
+    names.add(component.name);
+  }
+  return components;
 }
 
 function assertInside(root, path, label) {
@@ -56,8 +161,7 @@ function compileFile(source, filename, libraryOutput = "layout") {
 
 function lintLibrary(options = {}) {
   const root = resolve(options.root || process.cwd());
-  const configPath = resolve(root, options.config || "layouts.library.json");
-  const config = readJson(configPath);
+  const { configPath, config } = readLibraryConfig(root, options);
   const sourceRoot = resolve(root, config.source || "src");
   assertInside(root, sourceRoot, "source directory");
   const files = filesBelow(sourceRoot)
@@ -71,7 +175,7 @@ function lintLibrary(options = {}) {
     : undefined;
   const current = diagnostics.map(fingerprint).sort();
   if (options.updateBaseline) {
-    if (!baselinePath) throw new Error(`${configPath} has no lint.baseline path`);
+    if (!baselinePath) throw new Error(`${configPath || root} has no lint.baseline path`);
     writeJson(baselinePath, { format: "solid-layouts-lint-baseline-v1", diagnostics: current });
   }
   if (baselinePath && existsSync(baselinePath)) {
@@ -113,10 +217,9 @@ function lintLibrary(options = {}) {
 
 function generateLibrarySource(options = {}) {
   const root = resolve(options.root || process.cwd());
-  const configPath = resolve(root, options.config || "layouts.library.json");
-  const config = readJson(configPath);
+  const { configPath, config } = readLibraryConfig(root, options);
   if (config.mode !== "source") {
-    throw new Error(`${configPath} must set mode to "source" for adjacent generation`);
+    throw new Error(`${configPath || root} must set mode to "source" for adjacent generation`);
   }
   if (!Array.isArray(config.exports) || config.exports.length === 0) {
     throw new Error(`${configPath} must declare its public Layout exports`);
@@ -146,9 +249,8 @@ function generateLibrarySource(options = {}) {
 
 function emitSourceManifest(options = {}) {
   const root = resolve(options.root || process.cwd());
-  const configPath = resolve(root, options.config || "layouts.library.json");
-  const config = readJson(configPath);
-  if (config.mode !== "source") throw new Error(`${configPath} is not a source library config`);
+  const { configPath, config } = readLibraryConfig(root, options);
+  if (config.mode !== "source") throw new Error(`${configPath || root} is not a source library config`);
   const exports = config.exports || [];
   if (exports.length === 0) throw new Error(`${configPath} must declare its public Layout exports`);
   const duplicates = exports.filter((name, index) => exports.indexOf(name) !== index);
@@ -322,8 +424,7 @@ function assertComponent(component, sourceRoot, outputRoot) {
 
 function compileLibrary(options = {}) {
   const root = resolve(options.root || process.cwd());
-  const configPath = resolve(root, options.config || "layouts.library.json");
-  const config = readJson(configPath);
+  const { configPath, config } = readLibraryConfig(root, options);
   if (config.mode === "source") return generateLibrarySource({ ...options, root });
   const sourceRoot = resolve(root, config.source || "src");
   const outputRoot = resolve(root, config.output || "bundle");
@@ -359,7 +460,7 @@ function compileLibrary(options = {}) {
     }
   }
 
-  const configuredComponents = config.components || [];
+  const configuredComponents = config.components || discoverComponents(sourceRoot);
   generateEntries(configuredComponents, outputRoot);
 
   const components = {};
@@ -367,7 +468,7 @@ function compileLibrary(options = {}) {
     components[component.name] = assertComponent(component, sourceRoot, outputRoot);
   }
   if (Object.keys(components).length === 0) {
-    throw new Error(`${configPath} must declare at least one component`);
+    throw new Error(`${configPath || sourceRoot} must contain at least one Layout component`);
   }
 
   const manifest = {
@@ -410,8 +511,7 @@ function pluginSolidLayoutsLibrary(options = {}) {
     name: "solid-layouts:library",
     setup(api) {
       const root = resolve(options.root || api.context.rootPath);
-      const configPath = resolve(root, options.config || "layouts.library.json");
-      const config = readJson(configPath);
+      const { config } = readLibraryConfig(root, options);
       const compile = () =>
         compileLibrary({
           ...options,

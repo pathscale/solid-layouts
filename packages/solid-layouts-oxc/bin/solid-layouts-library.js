@@ -16,6 +16,8 @@ const root = resolve(valueAfter("--root") || process.cwd());
 const options = {
   root,
   config: valueAfter("--config"),
+  source: valueAfter("--source"),
+  output: valueAfter("--output"),
   check: args.includes("--check"),
   updateBaseline: args.includes("--update-baseline"),
 };

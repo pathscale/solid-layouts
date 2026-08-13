@@ -146,36 +146,23 @@ export const IconLayout = Icon;
 
 This file is intentionally not valid ordinary TSX. `local` and `slot` have no runtime declarations and the zero-parameter function cannot receive them. B is load-bearing: it rewrites this template before anything is packaged.
 
-### 3. Describe the public package join
+### 3. Use the discoverable source contract
 
-`Test-UI/layouts.library.json`:
+No authored component manifest is required. B discovers every `*.layout.tsx` below `src`, reads its `Layout<typeof recipe, Props>` annotation and recipe import, and requires the matching public `NameLayout` export:
 
-```json
-{
-  "source": "src",
-  "output": "bundle",
-  "components": [
-    {
-      "name": "Icon",
-      "entry": "index.ts",
-      "recipe": "components/icon/Icon.recipe.ts",
-      "recipeExport": "icon",
-      "layout": "components/icon/Icon.layout.tsx",
-      "layoutExport": "IconLayout"
-    },
-    {
-      "name": "Button",
-      "entry": "index.ts",
-      "recipe": "components/button/Button.recipe.ts",
-      "recipeExport": "button",
-      "layout": "components/button/Button.layout.tsx",
-      "layoutExport": "ButtonLayout"
-    }
-  ]
-}
+```text
+src/components/icon/
+  Icon.layout.tsx
+  Icon.recipe.ts
+
+src/components/button/
+  Button.layout.tsx
+  Button.recipe.ts
 ```
 
-This file is explicit because B cannot safely guess which internal recipe/Layout pair defines which public export. A typo or mismatch is a build error.
+The default source is `src`, the default output is `bundle`, and the generated public entry is `index.ts`. The relationship is explicit in the source rather than repeated in JSON. A missing or aliased recipe import, ambiguous Layout annotation, unexported props type, duplicate component name, or missing `NameLayout` export is a build error.
+
+An explicit `layouts.library.json` remains an optional escape hatch for nonstandard paths and adjacent source-mode generation. Ordinary generated libraries should not need one.
 
 ### 4. Build B and produce C
 
@@ -338,7 +325,7 @@ There is no graceful fallback. These failures mean the contract is working:
 
 | Failure | Where it stops | Why |
 | --- | --- | --- |
-| `.layout.tsx` does not name/import its configured recipe | B | A cannot be joined deterministically |
+| `.layout.tsx` does not name/import exactly one recipe | B | A cannot be joined deterministically |
 | Layout renders an undeclared slot | B | Recipe and markup disagree |
 | Recipe declares a slot the Layout never renders | B | C would carry dead or mistyped identity |
 | Configured package cannot be resolved | E setup | C is absent |
@@ -398,7 +385,7 @@ CI performs all four groups and fails if the committed C fixture no longer match
 The safe migration order is:
 
 1. Check out PR #221 as A.
-2. Add one `layouts.library.json` component record at a time.
+2. Move one colocated `Name.layout.tsx` and `Name.recipe.ts` pair at a time.
 3. Run B and inspect that component's generated C diff.
 4. Add library-host failures for any new syntax shape before accepting it.
 5. Keep generated entries and manifests owned by B; do not restore hand-written wiring.

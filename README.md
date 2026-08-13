@@ -66,7 +66,7 @@ bun add @pathscale/ui solid-layouts
 bun add -d rsbuild-plugin-solid-layouts
 ```
 
-The published packages are `solid-layouts@0.1.2`, `solid-layouts-oxc@0.1.2`, `rsbuild-plugin-solid-layouts@0.1.2`, and `@pathscale/ui@2.0.0`. The platform-specific native compiler binding is selected automatically for Apple arm64, Linux x64 GNU, or Linux arm64 GNU.
+The published packages are `solid-layouts@0.1.2`, `solid-layouts-oxc@0.1.3`, `rsbuild-plugin-solid-layouts@0.1.2`, and `@pathscale/ui@2.0.0`. The platform-specific native compiler binding is selected automatically for Apple arm64, Linux x64 GNU, or Linux arm64 GNU.
 
 For the application half, add `pluginSolidLayoutsApplication` before the Babel and Solid plugins:
 
@@ -122,7 +122,7 @@ Yes, all three layers have tests:
 | --- | ---: | --- |
 | Runtime | 143 Bun tests plus TypeScript | `cd packages/solid-layouts && bun run test && bun run typecheck` |
 | Native compiler | 56 Rust unit/conformance tests | `cd packages/solid-layouts-oxc && cargo test --workspace` |
-| Library host | 3 package-production tests | `cd packages/solid-layouts-oxc && bun run test:library` |
+| Library host | 6 package-production and discovery tests | `cd packages/solid-layouts-oxc && bun run test:library` |
 | Application host | 9 package-resolution, source-rewrite, and hard-failure tests | `cd packages/solid-layouts-oxc && bun run test:application` |
 
 CI also runs `cargo fmt`, Clippy with warnings denied, regenerates the compiled parity fixture, rebuilds the four-component C fixture, and fails if generated output is stale. The JavaScript host tests require the local native binding:

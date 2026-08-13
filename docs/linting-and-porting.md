@@ -4,7 +4,7 @@
 
 ## Library contract mode
 
-Run from a Layout library whose root contains `layouts.library.json`:
+Run from a Layout library. The default source directory is `src`; no authored manifest is required:
 
 ```sh
 solid-layouts-lint
@@ -125,16 +125,16 @@ An application can initially expose porting advice separately:
 
 ## User-owned recipes
 
-The compiler is package-neutral. A user publishes their own recipes and Layouts with the same library config:
+The compiler is package-neutral. A user can publish their own colocated recipes and Layouts with no config:
 
-```json
-{
-  "mode": "source",
-  "source": "src",
-  "output": "dist",
-  "exports": ["ProductCard", "CheckoutButton"]
-}
+```text
+src/components/product-card/ProductCard.layout.tsx
+src/components/product-card/ProductCard.recipe.ts
+src/components/checkout-button/CheckoutButton.layout.tsx
+src/components/checkout-button/CheckoutButton.recipe.ts
 ```
+
+The compiler derives `ProductCard`, `CheckoutButton`, their recipe bindings, props, and public type exports. An optional explicit config remains available for nonstandard paths or source-mode generation.
 
 Their application then configures both packages:
 

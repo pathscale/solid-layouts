@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Small Layout UI used to inspect the solid-layouts library compiler output",
   "license": "MIT",
+  "private": true,
   "type": "module",
   "sideEffects": [
     "**/*.css"
