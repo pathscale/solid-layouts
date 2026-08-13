@@ -12,7 +12,7 @@ permissions:
   id-token: write
 
 jobs:
-  publish:
+  package:
     runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
@@ -38,8 +38,34 @@ jobs:
         working-directory: packages/solid-layouts
         run: bun install --frozen-lockfile
 
-      - name: Publish
+      - name: Pack
         working-directory: ${{ steps.package.outputs.directory }}
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-package"
+          npm pack --pack-destination "$RUNNER_TEMP/npm-package"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/npm-package/*.tgz
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: npm-package
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish
+        run: npm publish npm-package/*.tgz --access public --provenance
