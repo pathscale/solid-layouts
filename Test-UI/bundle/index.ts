@@ -10,3 +10,8 @@ import { button } from "./components/button/Button.recipe";
 import type { ButtonProps as __ButtonProps } from "./components/button/Button.generated";
 export const Button = __defineLayoutComponent({ recipe: button, layout: ButtonLayout }) as __LayoutComponent<__ButtonProps>;
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./components/button/Button.generated";
+import { FlexLayout } from "./components/flex/Flex.generated";
+import { flex } from "./components/flex/Flex.recipe";
+import type { FlexProps as __FlexProps } from "./components/flex/Flex.generated";
+export const Flex = __defineLayoutComponent({ recipe: flex, layout: FlexLayout }) as __LayoutComponent<__FlexProps>;
+export type { FlexProps } from "./components/flex/Flex.generated";

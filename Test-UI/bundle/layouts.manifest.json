@@ -16,6 +16,13 @@
       "recipeExport": "button",
       "layout": "./components/button/Button.generated.tsx",
       "layoutExport": "ButtonLayout"
+    },
+    "Flex": {
+      "entry": "./index.ts",
+      "recipe": "./components/flex/Flex.recipe.ts",
+      "recipeExport": "flex",
+      "layout": "./components/flex/Flex.generated.tsx",
+      "layoutExport": "FlexLayout"
     }
   }
 }

@@ -21,6 +21,16 @@
       "layoutExport": "ButtonLayout",
       "propsType": "ButtonProps",
       "typeExports": ["ButtonProps", "ButtonVariant", "ButtonSize"]
+    },
+    {
+      "name": "Flex",
+      "entry": "index.ts",
+      "recipe": "components/flex/Flex.recipe.ts",
+      "recipeExport": "flex",
+      "layout": "components/flex/Flex.layout.tsx",
+      "layoutExport": "FlexLayout",
+      "propsType": "FlexProps",
+      "typeExports": ["FlexProps"]
     }
   ]
 }
