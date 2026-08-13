@@ -262,7 +262,7 @@ fn compile_library_source(source: &str, program: &Program<'_>, layouts: &[FoundL
             text: if uses_slots {
                 "({ slot, children }, p)".to_owned()
             } else {
-                "p".to_owned()
+                "(_stable, p)".to_owned()
             },
         });
 
@@ -555,7 +555,7 @@ const Icon: Layout<typeof icon, IconProps> = () => {
     }
 
     #[test]
-    fn compiles_a_legacy_component_layout_with_one_props_parameter() {
+    fn compiles_a_legacy_component_layout_with_stable_and_props_parameters() {
         let source = r#"import type { Layout } from "solid-layouts";
 import { button } from "./Button.recipe";
 const Button: Layout<typeof button, ButtonProps> = () => {
@@ -568,7 +568,7 @@ const Button: Layout<typeof button, ButtonProps> = () => {
             &TransformOptions::new("Button.layout.tsx", CompilerMode::Library),
         );
         assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
-        assert!(result.code.contains("= p =>"), "{}", result.code);
+        assert!(result.code.contains("= (_stable, p) =>"), "{}", result.code);
         assert!(
             result.code.contains("Boolean(p.disabled)"),
             "{}",
