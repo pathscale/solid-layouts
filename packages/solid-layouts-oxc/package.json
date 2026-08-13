@@ -15,9 +15,11 @@
       "default": "./loader.js"
     },
     "./library": {
+      "types": "./library.d.ts",
       "default": "./library.js"
     },
     "./application": {
+      "types": "./application.d.ts",
       "default": "./application.js"
     }
   },
@@ -27,7 +29,7 @@
   },
   "files": [
     "index.js",
-    "index.d.ts",
+    "*.d.ts",
     "loader.js",
     "library.js",
     "application.js",
@@ -61,6 +63,9 @@
   },
   "engines": {
     "node": ">= 18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "repository": {
     "type": "git",

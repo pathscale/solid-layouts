@@ -1,7 +1,7 @@
 {
   "format": "solid-layouts-library-v1",
   "package": "@pathscale/test-ui",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "components": {
     "Icon": {
       "entry": "./index.ts",

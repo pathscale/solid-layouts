@@ -1,0 +1,45 @@
+name: Release Solid Layouts JavaScript packages
+
+on:
+  push:
+    tags:
+      - "solid-layouts-v*"
+      - "rsbuild-plugin-solid-layouts-v*"
+      - "pathscale-test-ui-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Select package
+        id: package
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            solid-layouts-v*) echo "directory=packages/solid-layouts" >> "$GITHUB_OUTPUT" ;;
+            rsbuild-plugin-solid-layouts-v*) echo "directory=packages/rsbuild-plugin-solid-layouts" >> "$GITHUB_OUTPUT" ;;
+            pathscale-test-ui-v*) echo "directory=Test-UI/bundle" >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Install runtime build dependencies
+        if: startsWith(github.ref_name, 'solid-layouts-v')
+        working-directory: packages/solid-layouts
+        run: bun install --frozen-lockfile
+
+      - name: Publish
+        working-directory: ${{ steps.package.outputs.directory }}
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -8,3 +8,5 @@ packages/*/index.js
 packages/*/index.d.ts
 !packages/solid-layouts-oxc/index.js
 !packages/solid-layouts-oxc/index.d.ts
+!packages/rsbuild-plugin-solid-layouts/index.js
+!packages/rsbuild-plugin-solid-layouts/index.d.ts
