@@ -37,6 +37,7 @@ export const button = recipe({
     },
     isIconOnly: { true: "button--icon-only" },
     squareSize: {},
+    fillHeight: { true: "button--fill-height" },
     fullWidth: { true: "button--full-width" },
     isDisabled: {},
     isPending: {},

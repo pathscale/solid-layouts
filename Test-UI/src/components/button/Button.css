@@ -175,6 +175,11 @@
     width: 100%;
   }
 
+  .button--fill-height {
+    height: 100%;
+    min-height: 0;
+  }
+
   .button--justify-start {
     justify-content: flex-start;
     text-align: left;

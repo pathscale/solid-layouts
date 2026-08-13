@@ -13,6 +13,7 @@ type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "disabled">
   radius?: "none" | "sm" | "md" | "full";
   isIconOnly?: boolean;
   squareSize?: number;
+  fillHeight?: boolean;
   fullWidth?: boolean;
   isDisabled?: boolean;
   isPending?: boolean;
