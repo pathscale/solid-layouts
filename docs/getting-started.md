@@ -33,8 +33,8 @@ Do not point an application at raw UI source and do not copy generated files int
 The complete public package set is live:
 
 - `solid-layouts@0.1.2`: shared runtime
-- `solid-layouts-oxc@0.1.5`: native compiler hosts, CLI, and linter
-- `rsbuild-plugin-solid-layouts@0.1.2`: stable Rsbuild facade
+- `solid-layouts-oxc@0.1.6`: native compiler hosts, CLI, and linter
+- `rsbuild-plugin-solid-layouts@0.1.3`: stable Rsbuild facade
 - `@pathscale/ui@2.0.0`: compiled Layout UI package C
 
 Use registry package resolution for normal work. Object-shaped layout sources and an explicit runtime path remain development-only overrides for compiler fixtures.
