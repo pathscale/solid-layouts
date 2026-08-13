@@ -3,9 +3,12 @@ import { Show, type JSX } from "solid-js";
 import type { Layout } from "solid-layouts";
 import { button } from "./Button.recipe";
 
-export type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> & {
-  variant?: "primary" | "secondary" | "tertiary" | "outline" | "ghost" | "danger" | "danger-soft";
-  size?: "sm" | "md" | "lg";
+export type ButtonVariant = keyof typeof button.config.props.variant;
+export type ButtonSize = keyof typeof button.config.props.size;
+
+type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   justify?: "start" | "center" | "between";
   radius?: "none" | "sm" | "md" | "full";
   isIconOnly?: boolean;
@@ -15,6 +18,7 @@ export type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "dis
   isPending?: boolean;
   startIcon?: JSX.Element;
   endIcon?: JSX.Element;
+  className?: string;
 };
 
 const Button: Layout<typeof button, ButtonProps> = ({ slot, children }, p) => {
@@ -53,3 +57,5 @@ const Button: Layout<typeof button, ButtonProps> = ({ slot, children }, p) => {
 
 export const ButtonLayout = Button;
 export default Button;
+
+export type { ButtonProps };

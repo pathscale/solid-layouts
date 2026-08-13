@@ -58,6 +58,7 @@ test("builds valid generated Layout source and a package manifest", () => {
   expect(entry).toContain('from "solid-layouts/application-boundary"');
   expect(entry).toContain("export const Icon = __defineLayoutComponent");
   expect(entry).toContain("export const Button = __defineLayoutComponent");
+  expect(entry).toContain("export type { ButtonProps, ButtonVariant, ButtonSize }");
   expect(button).toContain("Boolean(p.isDisabled)");
   expect(button).toContain("p.squareSize / 2");
   expect(button).not.toContain("local.isDisabled");

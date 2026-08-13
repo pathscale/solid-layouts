@@ -77,6 +77,11 @@ function generateEntries(components, outputRoot) {
       `import { ${component.recipeExport} } from ${JSON.stringify(modulePath(entry, recipe))};`,
       `export const ${component.name} = __defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} });`,
     );
+    if (component.typeExports?.length) {
+      lines.push(
+        `export type { ${component.typeExports.join(", ")} } from ${JSON.stringify(modulePath(entry, generatedLayout))};`,
+      );
+    }
     entries.set(entry, lines);
   }
   for (const [entry, lines] of entries) {
