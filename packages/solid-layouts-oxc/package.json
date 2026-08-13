@@ -40,13 +40,7 @@
     "application.js",
     "porting.js",
     "bin",
-    "*.node",
-    "src",
-    "crates",
-    "Cargo.toml",
-    "Cargo.lock",
-    "build.rs",
-    "scripts"
+    "*.node"
   ],
   "napi": {
     "binaryName": "solid-layouts-oxc",
