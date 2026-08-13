@@ -1,10 +1,10 @@
-import { cx } from "./cx";
+import { cx } from "./cx.js";
 import type {
   CompiledRecipe,
   RecipeConfig,
   SlotAttrs,
   VariantClasses,
-} from "./types";
+} from "./types.js";
 
 /**
  * Every declared slot, resolved.

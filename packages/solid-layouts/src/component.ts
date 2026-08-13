@@ -8,11 +8,11 @@ import {
   useContext,
 } from "solid-js";
 import { Dynamic, createComponent } from "solid-js/web";
-import type { ComponentDefaults, UIConfig } from "./defaults";
-import { globalDefaultsFor } from "./defaults";
-import { __nextInstance, __slotId } from "./ids";
-import type { Recipe } from "./recipe";
-import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types";
+import type { ComponentDefaults, UIConfig } from "./defaults.js";
+import { globalDefaultsFor } from "./defaults.js";
+import { __nextInstance, __slotId } from "./ids.js";
+import type { Recipe } from "./recipe.js";
+import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types.js";
 
 /**
  * What a layout receives.
