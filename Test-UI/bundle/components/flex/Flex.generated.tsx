@@ -10,7 +10,9 @@ export type FlexProps = Omit<JSX.HTMLAttributes<HTMLElement>, "ref"> & {
   justify?: "start" | "center" | "end" | "between" | "around" | "evenly";
   align?: "start" | "center" | "end" | "stretch" | "baseline";
   wrap?: "wrap" | "nowrap" | "wrap-reverse";
-  gap?: "none" | "sm" | "md" | "lg" | "xl";
+  gap?: "none" | "xs" | "sm" | "base" | "md" | "lg" | "xl";
+  paddingInline?: "none" | "sm" | "md" | "lg";
+  paddingBlock?: "none" | "sm" | "md" | "lg";
   grow?: boolean;
   shrink?: boolean;
   className?: string;
