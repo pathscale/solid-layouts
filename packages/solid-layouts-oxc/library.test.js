@@ -42,6 +42,9 @@ test("builds valid generated Layout source and a package manifest", () => {
     "utf8",
   );
   const entry = readFileSync(join(result.outputRoot, "index.ts"), "utf8");
+  const packageJson = JSON.parse(
+    readFileSync(join(result.outputRoot, "package.json"), "utf8"),
+  );
   const button = readFileSync(
     join(result.outputRoot, "components/button/Button.generated.tsx"),
     "utf8",
@@ -58,6 +61,7 @@ test("builds valid generated Layout source and a package manifest", () => {
   expect(entry).toContain('from "solid-layouts/application-boundary"');
   expect(entry).toContain("export const Icon = __defineLayoutComponent");
   expect(entry).toContain("export const Button = __defineLayoutComponent");
+  expect(packageJson.private).toBe(true);
   expect(entry).toContain("as __LayoutComponent<__ButtonProps>");
   expect(entry).toContain("export type { ButtonProps, ButtonVariant, ButtonSize }");
   expect(button).toContain("Boolean(p.isDisabled)");

@@ -383,6 +383,7 @@ function compileLibrary(options = {}) {
     version: sourcePackage.version,
     description: sourcePackage.description,
     license: sourcePackage.license,
+    private: sourcePackage.private === true || undefined,
     type: "module",
     sideEffects: sourcePackage.sideEffects ?? ["**/*.css"],
     types: "./index.ts",
