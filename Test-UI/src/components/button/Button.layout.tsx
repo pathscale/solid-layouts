@@ -15,6 +15,7 @@ type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "disabled">
   squareSize?: number;
   fillHeight?: boolean;
   fullWidth?: boolean;
+  isSelected?: boolean;
   isDisabled?: boolean;
   isPending?: boolean;
   startIcon?: JSX.Element;
@@ -30,6 +31,7 @@ const Button: Layout<typeof button, ButtonProps> = () => {
       type="button"
       {...slot.root}
       data-pending={local.isPending ? "true" : "false"}
+      data-selected={local.isSelected ? "true" : "false"}
       disabled={disabled}
       aria-disabled={disabled ? "true" : "false"}
       style={{

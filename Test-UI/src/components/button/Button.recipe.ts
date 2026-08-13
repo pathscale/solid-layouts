@@ -20,6 +20,7 @@ export const button = recipe({
       "danger-soft": "button--danger-soft",
     },
     size: {
+      xs: "button--xs",
       sm: "button--sm",
       md: "button--md",
       lg: "button--lg",
@@ -39,6 +40,7 @@ export const button = recipe({
     squareSize: {},
     fillHeight: { true: "button--fill-height" },
     fullWidth: { true: "button--full-width" },
+    isSelected: { true: "button--selected" },
     isDisabled: {},
     isPending: {},
     startIcon: {},

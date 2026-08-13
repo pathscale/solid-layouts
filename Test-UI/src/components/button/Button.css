@@ -88,6 +88,12 @@
     padding-inline: 0.75rem;
   }
 
+  .button--xs {
+    height: 1.75rem;
+    padding-inline: 0.625rem;
+    font-size: 0.6875rem;
+  }
+
   .button--md {
   }
 
@@ -135,6 +141,11 @@
     --button-bg-pressed: color-mix(in oklab, var(--color-base-300), transparent 10%);
     --button-fg: var(--color-base-content);
     --button-border: var(--color-base-300);
+  }
+
+  .button--selected {
+    --button-border: var(--color-primary);
+    --button-fg: var(--color-primary);
   }
 
   .button--ghost {
