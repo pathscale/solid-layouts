@@ -6,7 +6,7 @@ use layouts_common::Diagnostic;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     BindingPattern, Declaration, Expression, ImportDeclarationSpecifier, JSXAttribute,
-    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElementName,
+    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElementName, JSXExpression,
     JSXMemberExpressionObject, JSXOpeningElement, MemberExpression, Program, Statement,
     VariableDeclaration,
 };
@@ -483,22 +483,129 @@ fn jsx_root<'a>(name: &'a JSXElementName<'a>) -> Option<&'a str> {
 
 struct ApplicationClasses<'a> {
     layouts: &'a HashSet<String>,
-    found: Vec<Span>,
+    found: Vec<PortingFinding>,
+    static_classes: Vec<StaticClassFinding>,
+}
+
+struct PortingFinding {
+    rule: &'static str,
+    message: String,
+    span: Span,
+}
+
+struct StaticClassFinding {
+    signature: String,
+    span: Span,
+}
+
+fn is_spacing_class(value: &str) -> bool {
+    value.split_whitespace().any(|class| {
+        let class = class.rsplit(':').next().unwrap_or(class);
+        [
+            "p-", "px-", "py-", "pt-", "pr-", "pb-", "pl-", "m-", "mx-", "my-", "mt-", "mr-",
+            "mb-", "ml-", "gap-", "space-x-", "space-y-", "w-", "h-", "min-w-", "min-h-", "max-w-",
+            "max-h-", "items-", "justify-", "self-",
+        ]
+        .iter()
+        .any(|prefix| class.starts_with(prefix))
+    })
+}
+
+fn class_finding(attribute: &JSXAttribute<'_>) -> PortingFinding {
+    match &attribute.value {
+        Some(JSXAttributeValue::StringLiteral(value)) if is_spacing_class(value.value.as_str()) => {
+            PortingFinding {
+                rule: "application-layout-utilities",
+                message: "spacing, sizing, or alignment on a Layout component should be a semantic recipe parameter".to_owned(),
+                span: attribute.span,
+            }
+        }
+        Some(JSXAttributeValue::ExpressionContainer(container))
+            if matches!(
+                container.expression,
+                JSXExpression::ConditionalExpression(_)
+                    | JSXExpression::LogicalExpression(_)
+                    | JSXExpression::TemplateLiteral(_)
+                    | JSXExpression::CallExpression(_)
+            ) => PortingFinding {
+                rule: "application-state-classes",
+                message: "dynamic classes on a Layout component should be a declared presentation or state axis".to_owned(),
+                span: attribute.span,
+            },
+        _ => PortingFinding {
+            rule: "application-manual-classes",
+            message: "manual class override on a Layout component should be a semantic recipe parameter".to_owned(),
+            span: attribute.span,
+        },
+    }
+}
+
+fn static_class_signature(attribute: &JSXAttribute<'_>) -> Option<String> {
+    let JSXAttributeValue::StringLiteral(value) = attribute.value.as_ref()? else {
+        return None;
+    };
+    let signature = value.value.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!signature.is_empty()).then_some(signature)
+}
+
+fn is_state_class(attribute: &JSXAttribute<'_>) -> bool {
+    matches!(
+        &attribute.value,
+        Some(JSXAttributeValue::ExpressionContainer(container))
+            if matches!(
+                container.expression,
+                JSXExpression::ConditionalExpression(_)
+                    | JSXExpression::LogicalExpression(_)
+                    | JSXExpression::TemplateLiteral(_)
+                    | JSXExpression::CallExpression(_)
+            )
+    )
 }
 
 impl<'a> Visit<'a> for ApplicationClasses<'a> {
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
-        if jsx_root(&element.name).is_some_and(|name| self.layouts.contains(name)) {
-            for attribute in &element.attributes {
-                let JSXAttributeItem::Attribute(attribute) = attribute else {
-                    continue;
-                };
-                let JSXAttributeName::Identifier(name) = &attribute.name else {
-                    continue;
-                };
-                if name.name == "class" || name.name == "className" {
-                    self.found.push(attribute.span);
+        let root = jsx_root(&element.name);
+        let is_layout = root.is_some_and(|name| self.layouts.contains(name));
+        let is_native_control =
+            root.is_some_and(|name| matches!(name, "button" | "input" | "select" | "textarea"));
+        for attribute in &element.attributes {
+            let JSXAttributeItem::Attribute(attribute) = attribute else {
+                continue;
+            };
+            let JSXAttributeName::Identifier(name) = &attribute.name else {
+                continue;
+            };
+            if name.name == "class" || name.name == "className" {
+                if let Some(signature) = static_class_signature(attribute) {
+                    self.static_classes.push(StaticClassFinding {
+                        signature,
+                        span: attribute.span,
+                    });
                 }
+                if is_native_control {
+                    self.found.push(PortingFinding {
+                        rule: "application-native-control",
+                        message: "styled native control may duplicate a reusable Layout component"
+                            .to_owned(),
+                        span: attribute.span,
+                    });
+                }
+                if is_state_class(attribute) {
+                    self.found.push(PortingFinding {
+                        rule: "application-state-classes",
+                        message: "dynamic classes should be a declared presentation or state axis"
+                            .to_owned(),
+                        span: attribute.span,
+                    });
+                } else if is_layout {
+                    self.found.push(class_finding(attribute));
+                }
+            } else if name.name == "classList" {
+                self.found.push(PortingFinding {
+                    rule: "application-state-classes",
+                    message: "classList state should be a declared state axis".to_owned(),
+                    span: attribute.span,
+                });
             }
         }
         oxc_ast_visit::walk::walk_jsx_opening_element(self, element);
@@ -514,7 +621,8 @@ pub fn lint_application(
         .map(|source| (source.module.as_str(), &source.exports))
         .collect();
     let mut diagnostics = Vec::new();
-    for file in files {
+    let mut static_classes: HashMap<String, Vec<(usize, Span)>> = HashMap::new();
+    for (file_index, file) in files.iter().enumerate() {
         let allocator = Allocator::default();
         let source_type =
             SourceType::from_path(&file.filename).unwrap_or_else(|_| SourceType::tsx());
@@ -542,17 +650,40 @@ pub fn lint_application(
         let mut visitor = ApplicationClasses {
             layouts: &layouts,
             found: Vec::new(),
+            static_classes: Vec::new(),
         };
         visitor.visit_program(&parsed.program);
-        diagnostics.extend(visitor.found.into_iter().map(|span| ProjectDiagnostic {
+        for finding in visitor.static_classes {
+            static_classes
+                .entry(finding.signature)
+                .or_default()
+                .push((file_index, finding.span));
+        }
+        diagnostics.extend(visitor.found.into_iter().map(|finding| ProjectDiagnostic {
             filename: file.filename.clone(),
             source: file.source.clone(),
-            rule: "application-manual-classes",
+            rule: finding.rule,
+            diagnostic: Diagnostic::warning(finding.message, finding.span),
+        }));
+    }
+    for (signature, occurrences) in static_classes {
+        if occurrences.len() < 3 {
+            continue;
+        }
+        let (file_index, span) = occurrences[0];
+        let file = &files[file_index];
+        diagnostics.push(ProjectDiagnostic {
+            filename: file.filename.clone(),
+            source: file.source.clone(),
+            rule: "application-repeated-classes",
             diagnostic: Diagnostic::warning(
-                "manual class override on a Layout component should be a semantic recipe parameter",
+                format!(
+                    "the same class signature occurs {} times and may be a reusable recipe: `{signature}`",
+                    occurrences.len()
+                ),
                 span,
             ),
-        }));
+        });
     }
     diagnostics
 }
@@ -705,10 +836,45 @@ export const View = () => <div class="page"><Button class="w-full" /><StatusIcon
             }],
         );
         assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics.iter().all(|item| matches!(
+            item.rule,
+            "application-layout-utilities" | "application-manual-classes"
+        )));
+    }
+
+    #[test]
+    fn porting_mode_finds_solid_state_controls_and_repeated_classes() {
+        let source = r#"export const View = () => <>
+  <div class="card shell" />
+  <section class="card shell" />
+  <article class="card shell" />
+  <button class="button" classList={{ active: true }} />
+  <div class={active() ? "on" : "off"} />
+</>;
+"#;
+        let diagnostics = lint_application(
+            &[ProjectFile {
+                filename: "/app/View.tsx".to_owned(),
+                source: source.to_owned(),
+            }],
+            &[],
+        );
         assert!(
             diagnostics
                 .iter()
-                .all(|item| item.rule == "application-manual-classes")
+                .any(|item| item.rule == "application-repeated-classes")
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|item| item.rule == "application-native-control")
+        );
+        assert_eq!(
+            diagnostics
+                .iter()
+                .filter(|item| item.rule == "application-state-classes")
+                .count(),
+            2
         );
     }
 }

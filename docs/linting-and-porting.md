@@ -51,15 +51,33 @@ Baseline diagnostics remain recorded but do not fail the command. A new diagnost
 
 ## Application porting mode
 
-Porting mode is advisory:
+Porting mode analyzes existing SolidJS application source. It does not parse the
+application as Layout template syntax, and it never fails the application build:
 
 ```sh
 solid-layouts-lint --porting --layouts @pathscale/ui
 ```
 
-It resolves the package's `solidLayouts` manifest and warns when application code passes `class` or `className` to an imported Layout component. Intrinsic HTML and components from unconfigured packages are not flagged. Aliases and compound calls such as `Card.Body` resolve through their imported public export.
+It reports high-value migration candidates:
 
-The report is a migration inventory: each warning points to presentation that should become an existing semantic recipe parameter or motivate a new parameter. It never fails the application build.
+| Rule | What it identifies |
+| --- | --- |
+| `application-layout-utilities` | Spacing, sizing, or alignment classes passed to an existing Layout component |
+| `application-manual-classes` | Other manual class overrides on an existing Layout component |
+| `application-state-classes` | Dynamic class expressions and Solid `classList` state |
+| `application-native-control` | Styled native controls that may duplicate a reusable component recipe |
+| `application-repeated-classes` | An exact static class signature repeated at least three times across the project |
+
+The configured package manifest identifies components that already have Layout
+recipes. Aliases and compound calls such as `Card.Body` resolve through their
+imported public export. The state, native-control, and repeated-signature rules
+also inspect ordinary Solid JSX, so a project can obtain useful guidance before
+it imports any Layout package.
+
+The report is a migration inventory: each warning points to presentation that
+should become an existing semantic recipe parameter or motivate a new recipe.
+Because the report is advisory, teams can track its count as migration progress
+without making existing application code invalid.
 
 Any number of Layout libraries can participate:
 
