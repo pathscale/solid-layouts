@@ -6,7 +6,10 @@ import { button } from "./Button.recipe";
 export type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> & {
   variant?: "primary" | "secondary" | "tertiary" | "outline" | "ghost" | "danger" | "danger-soft";
   size?: "sm" | "md" | "lg";
+  justify?: "start" | "center" | "between";
+  radius?: "none" | "sm" | "md" | "full";
   isIconOnly?: boolean;
+  squareSize?: number;
   fullWidth?: boolean;
   isDisabled?: boolean;
   isPending?: boolean;
@@ -24,6 +27,15 @@ const Button: Layout<typeof button, ButtonProps> = () => {
       data-pending={local.isPending ? "true" : "false"}
       disabled={disabled}
       aria-disabled={disabled ? "true" : "false"}
+      style={{
+        ...(typeof local.style === "object" ? local.style : {}),
+        width: local.squareSize ? `${local.squareSize}px` : undefined,
+        height: local.squareSize ? `${local.squareSize}px` : undefined,
+        "min-height": local.squareSize ? "0" : undefined,
+        "padding-inline": local.squareSize ? "0" : undefined,
+        "border-radius": local.squareSize ? `${local.squareSize / 2}px` : undefined,
+        "flex-shrink": local.squareSize ? "0" : undefined,
+      }}
     >
       <Show when={local.isPending}>
         <span {...slot.spinner} aria-hidden="true" />

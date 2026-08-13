@@ -82,6 +82,31 @@
     width: 100%;
   }
 
+  .button--justify-start {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .button--justify-between {
+    justify-content: space-between;
+  }
+
+  .button--radius-none {
+    border-radius: 0;
+  }
+
+  .button--radius-sm {
+    border-radius: 0.25rem;
+  }
+
+  .button--radius-md {
+    border-radius: 0.5rem;
+  }
+
+  .button--radius-full {
+    border-radius: 1.5rem;
+  }
+
   .button__icon {
     display: inline-flex;
     align-items: center;

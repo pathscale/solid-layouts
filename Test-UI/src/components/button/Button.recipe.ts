@@ -24,7 +24,19 @@ export const button = recipe({
       md: "button--md",
       lg: "button--lg",
     },
+    justify: {
+      start: "button--justify-start",
+      center: "button--justify-center",
+      between: "button--justify-between",
+    },
+    radius: {
+      none: "button--radius-none",
+      sm: "button--radius-sm",
+      md: "button--radius-md",
+      full: "button--radius-full",
+    },
     isIconOnly: { true: "button--icon-only" },
+    squareSize: {},
     fullWidth: { true: "button--full-width" },
     isDisabled: {},
     isPending: {},
@@ -34,5 +46,7 @@ export const button = recipe({
   defaults: {
     variant: "primary",
     size: "md",
+    justify: "center",
+    radius: "full",
   },
 });

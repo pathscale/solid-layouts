@@ -80,6 +80,8 @@ export const icon = recipe({
 
 The recipe declares what can affect presentation and which slots the Layout may render. B compiles its static lookup table once; the runtime does not reconstruct the table for every Icon instance.
 
+Presentation parameters belong in the producer recipe and Layout, not in application CSS. For example, the Test-UI Button exposes `variant`, `size`, `squareSize`, `justify`, and `radius`; a consumer can request `<Button variant="outline" squareSize={32}>` without rebuilding Button geometry in a local stylesheet. Application CSS should remain only for relationships the component cannot own, such as revealing a child control when its parent row is hovered.
+
 ### 2. Author the Layout template
 
 `Test-UI/src/components/icon/Icon.layout.tsx` contains template syntax:
