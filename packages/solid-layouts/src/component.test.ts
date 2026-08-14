@@ -454,8 +454,37 @@ describe("defineComponent: layouts and plain HTML", () => {
     expect(seen.p?.color).toBe("danger");
     expect(seen.p?.id).toBe("save");
     expect(seen.p?.value).toBe(7);
-    expect(seen.slot?.root).not.toHaveProperty("id");
     expect(seen.slot?.root?.class).toContain("btn--danger");
+    dispose();
+  });
+
+  test("an embedded component's root slot carries the caller's HTML props too", () => {
+    // This used to assert the opposite, and the opposite was a bug. `embedded`
+    // is what the compiler sets on every component it produces, so exempting it
+    // meant a real library dropped `aria-label`, `title`, `data-testid` and
+    // `onClick` from every one of its components, silently. A compiled layout
+    // only ever spreads `slot.root`; it has no other way to reach them.
+    const { seen, layout } = capturing();
+    const Button = defineComponent({
+      recipe: button,
+      layout: layout as never,
+      embedded: true,
+    });
+
+    const handler = () => {};
+    const dispose = mount(Button, {
+      "aria-label": "Save",
+      title: "Save this",
+      onClick: handler,
+    });
+
+    const attrs = seen.slot?.root as unknown as Record<string, unknown>;
+    expect(attrs["aria-label"]).toBe("Save");
+    expect(attrs.title).toBe("Save this");
+    expect(attrs.onClick).toBe(handler);
+    // The recipe still wins where they collide, embedded or not.
+    expect(String(attrs.class)).toContain("btn");
+    expect(attrs["data-slot"]).toBe("button");
     dispose();
   });
 

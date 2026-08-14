@@ -241,8 +241,16 @@ export function defineComponent<
         // `slot`, so `<Badge.Anchor id="x" onClick={...}>` rendered neither.
         // Recipe attributes go on top, so a caller still cannot overwrite the
         // class or the `data-slot` that identifies the component.
+        //
+        // Compiled components are not an exception, though they were: this read
+        // `name === rootSlot && !embedded`, which exempted every component the
+        // compiler produces, which is all of them in a real library. A stock
+        // button rendered without the `aria-label`, `title`, `data-testid` or
+        // `onClick` its caller passed, and nothing said so. It cost 72 of the 78
+        // failures that porting one application to a Layout-based library
+        // produced, and each one read as an application bug.
         get: () =>
-          name === rootSlot && !embedded
+          name === rootSlot
             ? ({
                 ...asAttributes(passthrough as Record<string, unknown>),
                 ...(resolved()[name] as SlotAttrs),
