@@ -7,6 +7,28 @@ const { transform } = require("./index.js");
 
 const FORMAT = "solid-layouts-library-v2";
 const APPLICATION_BOUNDARY = "solid-layouts/application-boundary";
+const SOLID_2_APPLICATION_BOUNDARY = "solid-layouts/solid-2/application-boundary";
+
+/**
+ * The specifier a generated component imports its boundary from, and the
+ * `solid-layouts` subpath that specifier has to resolve to.
+ *
+ * Two entries because the runtime is published twice: Solid 2.0 moved
+ * `Dynamic` and `createComponent` out of `solid-js/web` and dropped that
+ * subpath, so one build cannot serve both majors. The specifier is spelled out
+ * in the generated file rather than resolved by a bundler condition, which
+ * means `grep` answers which runtime a build is on and a mismatch reads as a
+ * wrong-looking import rather than as a resolve failure two layers down.
+ */
+function boundaryFor(solid) {
+  if (solid === undefined || solid === 1) {
+    return { specifier: APPLICATION_BOUNDARY, subpath: "." };
+  }
+  if (solid === 2) {
+    return { specifier: SOLID_2_APPLICATION_BOUNDARY, subpath: "./solid-2" };
+  }
+  throw new Error(`unknown solid major: ${solid}`);
+}
 
 function readJson(path, label) {
   try {
@@ -43,13 +65,22 @@ function requiredFile(packageRoot, path, label) {
   return absolute;
 }
 
-function publicEntryFrom(packageJson) {
-  const rootExport = packageJson.exports?.["."];
+function publicEntryFrom(packageJson, subpath = ".") {
+  const rootExport = packageJson.exports?.[subpath];
   if (typeof rootExport === "string") return rootExport;
   if (rootExport && typeof rootExport === "object") {
     for (const condition of ["import", "default"]) {
       if (typeof rootExport[condition] === "string") return rootExport[condition];
     }
+  }
+  // Only the root entry has the legacy fields to fall back on. A named subpath
+  // that is missing is a version of the runtime the installed package does not
+  // publish, which is worth saying plainly rather than silently serving the
+  // wrong major from `main`.
+  if (subpath !== ".") {
+    throw new Error(
+      `${packageJson.name}@${packageJson.version} does not export ${subpath}; it predates Solid 2 support`,
+    );
   }
   for (const field of ["module", "main"]) {
     if (typeof packageJson[field] === "string") return packageJson[field];
@@ -141,14 +172,18 @@ function publicSubpathSources(source) {
     .sort((a, b) => a.module.localeCompare(b.module));
 }
 
-function resolvePublicPackageEntry(root, module) {
+function resolvePublicPackageEntry(root, module, subpath = ".") {
   const packageJsonPath = resolvePackageJson(root, module);
   const packageRoot = dirname(packageJsonPath);
   const packageJson = readJson(packageJsonPath, `${module} package metadata`);
   if (packageJson.name !== module) {
     throw new Error(`resolved package ${packageJson.name} does not match ${module}`);
   }
-  return requiredFile(packageRoot, publicEntryFrom(packageJson), `${module} public entry`);
+  return requiredFile(
+    packageRoot,
+    publicEntryFrom(packageJson, subpath),
+    `${module} public entry`,
+  );
 }
 
 function validateComponent(module, packageRoot, name, component) {
@@ -286,8 +321,9 @@ function compileApplicationFile(source, filename, application) {
 }
 
 function pluginSolidLayoutsApplication(options = {}) {
+  const boundary = boundaryFor(options.solid);
   return {
-    name: "solid-layouts:application",
+    name: options.solid === 2 ? "solid-layouts:application:solid-2" : "solid-layouts:application",
     enforce: "post",
     setup(api) {
       const application = compileApplication({
@@ -296,13 +332,13 @@ function pluginSolidLayoutsApplication(options = {}) {
       });
       const runtime = options.runtime
         ? resolve(application.root, options.runtime)
-        : resolvePublicPackageEntry(application.root, "solid-layouts");
+        : resolvePublicPackageEntry(application.root, "solid-layouts", boundary.subpath);
       if (!existsSync(runtime)) throw new Error(`solid-layouts runtime not found: ${runtime}`);
 
       api.modifyBundlerChain({
         order: "post",
         handler(chain) {
-          chain.resolve.alias.set(APPLICATION_BOUNDARY, runtime);
+          chain.resolve.alias.set(boundary.specifier, runtime);
           chain.module
             .rule("solid-layouts-application")
             .after("babel-js")
@@ -321,11 +357,27 @@ function pluginSolidLayoutsApplication(options = {}) {
   };
 }
 
+/**
+ * The Solid 2.0 form of the application plugin.
+ *
+ * A separate exported name rather than an option the caller passes, because
+ * the choice is not independent of the rest of the build: it has to agree with
+ * `pluginSolid2()` and with the installed `solid-js`. A name that must match
+ * its neighbour in the plugin list is easier to get right, and easier to read
+ * back later, than a flag that must.
+ */
+function pluginSolid2LayoutsApplication(options = {}) {
+  return pluginSolidLayoutsApplication({ ...options, solid: 2 });
+}
+
 module.exports = {
   APPLICATION_BOUNDARY,
   FORMAT,
+  SOLID_2_APPLICATION_BOUNDARY,
+  boundaryFor,
   compileApplication,
   compileApplicationFile,
+  pluginSolid2LayoutsApplication,
   pluginSolidLayoutsApplication,
   resolveLayoutSource,
 };

@@ -12,6 +12,7 @@ const {
 } = require("node:fs");
 const { basename, dirname, relative, resolve, sep } = require("node:path");
 const { lintProject, transform } = require("./index.js");
+const { boundaryFor } = require("./application.js");
 
 const FORMAT = "solid-layouts-library-v2";
 
@@ -157,8 +158,8 @@ function formatDiagnostics(filename, diagnostics) {
     .join("\n");
 }
 
-function compileFile(source, filename, libraryOutput = "layout") {
-  const result = transform(source, filename, { mode: "library", libraryOutput });
+function compileFile(source, filename, libraryOutput = "layout", solid = 1) {
+  const result = transform(source, filename, { mode: "library", libraryOutput, solid });
   if (result.failed) throw new Error(formatDiagnostics(filename, result.diagnostics));
   return result.code;
 }
@@ -255,6 +256,7 @@ function sourceModeExportsMessage(configPath) {
 function generateLibrarySource(options = {}) {
   const root = resolve(options.root || process.cwd());
   const { configPath, config } = readLibraryConfig(root, options);
+  const solid = options.solid ?? config.solid;
   if (config.mode !== "source") {
     throw new Error(`${configPath || root} must set mode to "source" for adjacent generation`);
   }
@@ -272,7 +274,7 @@ function generateLibrarySource(options = {}) {
   for (const input of filesBelow(lint.sourceRoot)) {
     if (!/\.layout\.(tsx|jsx)$/.test(input)) continue;
     const output = input.replace(/\.layout\.(tsx|jsx)$/, ".generated.$1");
-    const compiled = `${compileFile(readFileSync(input, "utf8"), input, "component").trimEnd()}\n`;
+    const compiled = `${compileFile(readFileSync(input, "utf8"), input, "component", solid).trimEnd()}\n`;
     const current = existsSync(output) ? readFileSync(output, "utf8") : "";
     if (current === compiled) continue;
     if (options.check) {
@@ -314,7 +316,7 @@ function modulePath(fromFile, toFile) {
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
-function generateEntries(components, outputRoot) {
+function generateEntries(components, outputRoot, solid) {
   const entries = new Map();
   for (const component of components) {
     const entry = resolve(outputRoot, component.entry);
@@ -324,7 +326,7 @@ function generateEntries(components, outputRoot) {
     );
     const recipe = resolve(outputRoot, component.recipe);
     const lines = entries.get(entry) || [
-      'import { defineComponent as __defineLayoutComponent } from "solid-layouts/application-boundary";',
+      `import { defineComponent as __defineLayoutComponent } from "${boundaryFor(solid).specifier}";`,
       'import type { Component as __LayoutComponent } from "solid-js";',
     ];
     const componentExpression = component.propsType
@@ -351,7 +353,7 @@ function generateEntries(components, outputRoot) {
   }
 }
 
-function assertComponent(component, sourceRoot, outputRoot) {
+function assertComponent(component, sourceRoot, outputRoot, solid) {
   for (const key of ["name", "entry", "recipe", "recipeExport", "layout", "layoutExport"]) {
     if (!component[key]) throw new Error(`component entry is missing ${key}`);
   }
@@ -418,7 +420,7 @@ function assertComponent(component, sourceRoot, outputRoot) {
       `${component.name}: generated layout does not export ${component.layoutExport}`,
     );
   }
-  if (!entryOutput.includes("solid-layouts/application-boundary")) {
+  if (!entryOutput.includes(boundaryFor(solid).specifier)) {
     throw new Error(`${component.name}: ${component.entry} has no application compiler boundary`);
   }
 
@@ -465,6 +467,7 @@ function compileLibrary(options = {}) {
   const root = resolve(options.root || process.cwd());
   const { configPath, config } = readLibraryConfig(root, options);
   if (config.mode === "source") return generateLibrarySource({ ...options, root });
+  const solid = options.solid ?? config.solid;
   const sourceRoot = resolve(root, config.source || "src");
   const outputRoot = resolve(root, config.output || "bundle");
   const sourcePackage = readJson(resolve(root, "package.json"));
@@ -490,7 +493,7 @@ function compileLibrary(options = {}) {
     mkdirSync(dirname(output), { recursive: true });
 
     if (isLayout || /\.recipe\.(ts|tsx|js|jsx)$/.test(fromSource)) {
-      const compiled = compileFile(readFileSync(input, "utf8"), input);
+      const compiled = compileFile(readFileSync(input, "utf8"), input, "layout", solid);
       writeFileSync(output, compiled);
       const parsed = transform(compiled, output, { mode: "library", parseOnly: true });
       if (parsed.failed) throw new Error(formatDiagnostics(output, parsed.diagnostics));
@@ -500,11 +503,11 @@ function compileLibrary(options = {}) {
   }
 
   const configuredComponents = config.components || discoverComponents(sourceRoot);
-  generateEntries(configuredComponents, outputRoot);
+  generateEntries(configuredComponents, outputRoot, solid);
 
   const components = {};
   for (const component of configuredComponents) {
-    components[component.name] = assertComponent(component, sourceRoot, outputRoot);
+    components[component.name] = assertComponent(component, sourceRoot, outputRoot, solid);
   }
   if (Object.keys(components).length === 0) {
     throw new Error(`${configPath || sourceRoot} must contain at least one Layout component`);
@@ -547,10 +550,11 @@ function compileLibrary(options = {}) {
 
 function pluginSolidLayoutsLibrary(options = {}) {
   return {
-    name: "solid-layouts:library",
+    name: options.solid === 2 ? "solid-layouts:library:solid-2" : "solid-layouts:library",
     setup(api) {
       const root = resolve(options.root || api.context.rootPath);
       const { config } = readLibraryConfig(root, options);
+      const solid = options.solid ?? config.solid;
       const compile = () =>
         compileLibrary({
           ...options,
@@ -570,7 +574,7 @@ function pluginSolidLayoutsLibrary(options = {}) {
               .end()
               .use("solid-layouts-library")
               .loader(require.resolve("./loader.js"))
-              .options({ mode: "library", libraryOutput: "layout" });
+              .options({ mode: "library", libraryOutput: "layout", solid });
           },
         });
         api.onAfterBuild(() => emitSourceManifest({ ...options, root }));
@@ -579,11 +583,20 @@ function pluginSolidLayoutsLibrary(options = {}) {
   };
 }
 
+/**
+ * The Solid 2.0 form of the library plugin. See its application twin for why
+ * this is a second exported name rather than an option on the first.
+ */
+function pluginSolid2LayoutsLibrary(options = {}) {
+  return pluginSolidLayoutsLibrary({ ...options, solid: 2 });
+}
+
 module.exports = {
   FORMAT,
   compileLibrary,
   generateLibrarySource,
   emitSourceManifest,
   lintLibrary,
+  pluginSolid2LayoutsLibrary,
   pluginSolidLayoutsLibrary,
 };

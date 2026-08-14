@@ -31,6 +31,7 @@ module.exports = function layoutsLoader(source) {
     result = transform(source, filename, {
       mode: options.mode,
       libraryOutput: options.libraryOutput,
+      solid: options.solid,
       layoutSources: options.layoutSources,
       parseOnly: options.parseOnly,
     });
