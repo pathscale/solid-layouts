@@ -5,6 +5,12 @@ export type SolidLayoutsLibraryOptions = {
   output?: string;
   check?: boolean;
   updateBaseline?: boolean;
+  /**
+   * Which major of Solid the emitted boundary import targets. Defaults to 1,
+   * or to `solid` in `layouts.library.json`. Prefer
+   * `pluginSolid2LayoutsLibrary`, which sets it.
+   */
+  solid?: 1 | 2;
 };
 
 export type LibraryDiagnostic = {
@@ -66,4 +72,7 @@ export declare function lintLibrary(
 };
 export declare function pluginSolidLayoutsLibrary(
   options?: SolidLayoutsLibraryOptions,
+): { name: string; setup(api: unknown): void };
+export declare function pluginSolid2LayoutsLibrary(
+  options?: Omit<SolidLayoutsLibraryOptions, "solid">,
 ): { name: string; setup(api: unknown): void };

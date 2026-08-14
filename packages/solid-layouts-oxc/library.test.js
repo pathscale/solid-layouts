@@ -78,6 +78,26 @@ test("builds valid generated Layout source and a package manifest", () => {
   );
 });
 
+test("the solid major picks which runtime entry the generated entry imports", () => {
+  // The whole point of naming the runtime in the emitted source rather than
+  // resolving it through a bundler condition: which major a build is on is a
+  // line you can read, in a file you can grep.
+  const one = readFileSync(
+    join(compileLibrary({ root: fixture() }).outputRoot, "index.ts"),
+    "utf8",
+  );
+  const two = readFileSync(
+    join(compileLibrary({ root: fixture(), solid: 2 }).outputRoot, "index.ts"),
+    "utf8",
+  );
+
+  expect(one).toContain('from "solid-layouts/application-boundary"');
+  expect(one).not.toContain("solid-2");
+  expect(two).toContain('from "solid-layouts/solid-2/application-boundary"');
+  // Everything else about the two entries is the same file.
+  expect(two.replace("/solid-2/application-boundary", "/application-boundary")).toBe(one);
+});
+
 test("lints the library with the native project checker", () => {
   const root = fixture();
   const result = lintLibrary({ root });
