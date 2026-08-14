@@ -18,9 +18,9 @@ export type FlexProps = Omit<JSX.HTMLAttributes<HTMLElement>, "ref"> & {
   className?: string;
 };
 
-const Flex: Layout<typeof flex, FlexProps> = ({ slot, children }, p) => (
-  <Dynamic component={p.as ?? "div"} {...slot.root}>
-    {children}
+const Flex: Layout<typeof flex, FlexProps> = (_stable, p) => (
+  <Dynamic component={p.as ?? "div"} {..._stable.slot.root}>
+    {_stable.children}
   </Dynamic>
 );
 
