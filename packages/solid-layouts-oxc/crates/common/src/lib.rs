@@ -41,6 +41,34 @@ pub enum LibraryOutput {
     Component,
 }
 
+/// Which major of Solid the emitted code targets.
+///
+/// It decides one thing: which `solid-layouts` entry a generated component
+/// imports its boundary from. The runtime is published twice because Solid 2.0
+/// moved `Dynamic` and `createComponent` out of `solid-js/web` into
+/// `@solidjs/web` and dropped the old subpath, so one specifier cannot resolve
+/// under both.
+///
+/// Configured rather than sniffed. The compiler sees a source file, and the
+/// answer is a fact about the application being built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SolidVersion {
+    #[default]
+    V1,
+    V2,
+}
+
+impl SolidVersion {
+    /// The module a generated component imports `defineComponent` from.
+    pub fn application_boundary(self) -> &'static str {
+        match self {
+            Self::V1 => "solid-layouts/application-boundary",
+            Self::V2 => "solid-layouts/solid-2/application-boundary",
+        }
+    }
+}
+
 /// One resolved Layout package available to an application build.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +121,8 @@ pub struct TransformOptions {
     #[serde(default)]
     pub library_output: LibraryOutput,
     #[serde(default)]
+    pub solid: SolidVersion,
+    #[serde(default)]
     pub config: LayoutsConfig,
     /// Off by default. With it set the pass parses and returns the source
     /// unchanged, which is how a host proves the pipeline is wired before any
@@ -107,6 +137,7 @@ impl TransformOptions {
             filename: filename.into(),
             mode,
             library_output: LibraryOutput::default(),
+            solid: SolidVersion::default(),
             config: LayoutsConfig::default(),
             parse_only: false,
         }

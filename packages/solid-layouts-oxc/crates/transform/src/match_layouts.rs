@@ -224,6 +224,12 @@ fn declared_name(declaration: &Declaration<'_>, origins: &mut HashMap<String, Or
 ///
 /// The list matches `babel-preset-solid`'s `builtIns`, which is the same set
 /// the JSX transform special-cases, so the two agree about what a built-in is.
+///
+/// Both majors' names are here, and the union is safe rather than sloppy: the
+/// pairing of name and module is what the check below tests, and no 1.9 build
+/// can import `Loading` from a Solid module because 1.9 does not export one.
+/// The renames are `Suspense` to `Loading`, `SuspenseList` to `Reveal`,
+/// `ErrorBoundary` to `Errored`, and `Index` folded into `<For keyed={false}>`.
 const SOLID_BUILTINS: &[&str] = &[
     "For",
     "Show",
@@ -235,6 +241,11 @@ const SOLID_BUILTINS: &[&str] = &[
     "Index",
     "Dynamic",
     "ErrorBoundary",
+    // 2.0
+    "Loading",
+    "Reveal",
+    "Repeat",
+    "Errored",
 ];
 
 /// Whether a name is a Solid built-in imported from Solid itself.
@@ -242,8 +253,15 @@ const SOLID_BUILTINS: &[&str] = &[
 /// Both halves matter. A user's own component called `Show` imported from
 /// their library still needs a Layout, and a built-in imported from anywhere
 /// else is not the built-in.
+///
+/// `@solidjs/web` is where 2.0 serves the renderer's half of the list, and it
+/// is Solid itself, so it belongs beside the two 1.9 modules rather than being
+/// gated behind the version option. `solid-js/web` does not exist under 2.0 and
+/// `@solidjs/web` does not exist under 1.9, so admitting all three cannot make
+/// one major accept the other's import.
 fn is_solid_builtin(name: &str, source: &str) -> bool {
-    SOLID_BUILTINS.contains(&name) && (source == "solid-js" || source == "solid-js/web")
+    SOLID_BUILTINS.contains(&name)
+        && matches!(source, "solid-js" | "solid-js/web" | "@solidjs/web")
 }
 
 /// Checks every component reference against the configured Layout sources.

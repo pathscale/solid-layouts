@@ -34,6 +34,12 @@ export interface JsLayoutSource {
 export interface JsOptions {
   mode: string
   libraryOutput?: string
+  /**
+   * Which major of Solid the output targets: `1` or `2`. Defaults to 1,
+   * so a host that has never heard of this option keeps emitting what it
+   * always emitted.
+   */
+  solid?: number
   layoutSources?: Array<JsLayoutSource>
   parseOnly?: boolean
 }
