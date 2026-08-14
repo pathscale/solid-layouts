@@ -219,6 +219,39 @@ function lintLibrary(options = {}) {
   };
 }
 
+/**
+ * Why source mode asks for a list when nothing else does.
+ *
+ * Convention-based discovery reads every `*.layout.tsx` and emits a `generated`
+ * manifest entry carrying the recipe, the Layout and their exports, so the
+ * application compiler can verify the join. Source mode generates alongside an
+ * existing package instead, where the public surface is whatever that package's
+ * own barrel exports, including parts like `AccordionItem` that share a parent's
+ * layout file and have no file of their own. The compiler cannot infer that, so
+ * source mode is told.
+ *
+ * The old message said only "must declare its public Layout exports", which
+ * reads as a missing field rather than as a consequence of the mode, and sends
+ * you to write the list rather than to ask whether you wanted the mode. The
+ * documentation says no authored component manifest is required, and for
+ * convention-based discovery that is true.
+ */
+function sourceModeExportsMessage(configPath) {
+  return [
+    `${configPath}: source mode needs an "exports" array naming this package's public components.`,
+    "",
+    'Only `mode: "source"` needs one. Convention-based discovery derives the manifest from',
+    "every `*.layout.tsx` it finds, and emits richer entries the application compiler can",
+    "verify; source mode generates alongside a package whose public surface it cannot see,",
+    "so the list is how it learns the names.",
+    "",
+    "If this package does not need adjacent generation, delete the config and let discovery",
+    "do it. If it does, the list has to be kept in step with the barrel by hand: nothing",
+    "compares them, and a rename that misses it leaves the manifest naming components that",
+    "no longer exist while rejecting the ones that do.",
+  ].join("\n");
+}
+
 function generateLibrarySource(options = {}) {
   const root = resolve(options.root || process.cwd());
   const { configPath, config } = readLibraryConfig(root, options);
@@ -226,7 +259,7 @@ function generateLibrarySource(options = {}) {
     throw new Error(`${configPath || root} must set mode to "source" for adjacent generation`);
   }
   if (!Array.isArray(config.exports) || config.exports.length === 0) {
-    throw new Error(`${configPath} must declare its public Layout exports`);
+    throw new Error(sourceModeExportsMessage(configPath));
   }
   const lint = lintLibrary({ ...options, root });
   if (lint.failed) {
@@ -256,7 +289,7 @@ function emitSourceManifest(options = {}) {
   const { configPath, config } = readLibraryConfig(root, options);
   if (config.mode !== "source") throw new Error(`${configPath || root} is not a source library config`);
   const exports = config.exports || [];
-  if (exports.length === 0) throw new Error(`${configPath} must declare its public Layout exports`);
+  if (exports.length === 0) throw new Error(sourceModeExportsMessage(configPath));
   const duplicates = exports.filter((name, index) => exports.indexOf(name) !== index);
   if (duplicates.length) throw new Error(`${configPath} repeats Layout export ${duplicates[0]}`);
   const sourcePackage = readJson(resolve(root, "package.json"));
