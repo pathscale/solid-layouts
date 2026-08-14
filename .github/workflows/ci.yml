@@ -129,6 +129,15 @@ jobs:
       - name: Test the library compiler host
         run: bun run test:library
 
+      # The application host resolves a consumer's declared runtime by reading
+      # `solid-layouts`'s built entry off disk, so the runtime has to exist
+      # before these run. Without this the job fails on a missing
+      # `packages/solid-layouts/dist/index.js`, which reads as a broken
+      # resolver rather than an unbuilt dependency.
+      - name: Build the runtime the application host resolves against
+        working-directory: packages/solid-layouts
+        run: bun install --frozen-lockfile && bun run build
+
       - name: Test the application compiler host
         run: bun run test:application
 
