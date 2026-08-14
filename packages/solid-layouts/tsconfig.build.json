@@ -9,5 +9,9 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/__parity__"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/__parity__",
+    "src/renderer.solid-2.ts"
+  ]
 }

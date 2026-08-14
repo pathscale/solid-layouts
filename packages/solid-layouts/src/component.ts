@@ -1,18 +1,94 @@
+import * as solid from "solid-js";
 import {
   type Context,
-  type JSX,
   children as resolveChildren,
   createContext,
   createMemo,
-  splitProps,
   useContext,
 } from "solid-js";
-import { Dynamic, createComponent } from "solid-js/web";
 import type { ComponentDefaults, UIConfig } from "./defaults.js";
 import { globalDefaultsFor } from "./defaults.js";
 import { __nextInstance, __slotId } from "./ids.js";
 import type { Recipe } from "./recipe.js";
+import { Dynamic, type JSX, createComponent } from "./renderer.js";
 import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types.js";
+
+/**
+ * `props` without `keys`, still tracked.
+ *
+ * 1.9 spells this `splitProps(props, keys)[1]`. 2.0 renamed it to `omit`, made
+ * it variadic, and took `splitProps` away.
+ *
+ * Detected from the module object rather than configured, and resolved once at
+ * load rather than branched per call. Which one is there is a fact about the
+ * `solid-js` that got installed, and no build flag can be more right about that
+ * than the module itself; a flag can only disagree with it.
+ */
+type Solid1Props = {
+  splitProps(
+    props: Record<string, unknown>,
+    keys: string[],
+  ): [Record<string, unknown>, Record<string, unknown>];
+};
+type Solid2Props = {
+  omit(
+    props: Record<string, unknown>,
+    ...keys: string[]
+  ): Record<string, unknown>;
+};
+
+const rest: (
+  props: Record<string, unknown>,
+  keys: readonly string[],
+) => Record<string, unknown> =
+  "omit" in solid
+    ? (props, keys) =>
+        (solid as unknown as Solid2Props).omit(props, ...keys)
+    : (props, keys) =>
+        (solid as unknown as Solid1Props).splitProps(props, keys as string[])[1];
+
+/**
+ * The component that provides a context's value.
+ *
+ * 1.9 hangs it off the context as `.Provider`. In 2.0 the context *is* the
+ * provider and `.Provider` is gone, so asking for it and falling back covers
+ * both without knowing which is running.
+ */
+type Provider<T> = (props: { value: T; children: JSX.Element }) => JSX.Element;
+
+const providerOf = <T,>(context: unknown): Provider<T> =>
+  ((context as { Provider?: unknown }).Provider ?? context) as Provider<T>;
+
+/** The four props every consumer may set, whatever the component declares. */
+const ESCAPE_KEYS = ["class", "className", "style", "children"] as const;
+
+/**
+ * The half of `splitProps` neither major ships: both give back a remainder,
+ * neither gives back a subset.
+ *
+ * Each bucket is a plain object of getters over `props`, which is what
+ * `splitProps` returned anyway, so reads stay tracked at the point of use.
+ *
+ * A key absent from `props` is skipped rather than defined as `undefined`,
+ * matching `splitProps`. `setup` receives the behaviour bucket, and some read
+ * their own keys with `in` or `Object.keys`, which a defined-but-undefined key
+ * would answer wrongly.
+ */
+function pick(
+  props: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (!(key in props)) continue;
+    Object.defineProperty(out, key, {
+      get: () => props[key],
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return out;
+}
 
 /**
  * What a layout receives.
@@ -37,23 +113,34 @@ export type Layout<R, Model = Record<never, never>> = (
   props: PropsOf<R> & StateOf<R> & Model & Record<string, unknown>,
 ) => JSX.Element;
 
-/** Subtree-scoped defaults. The layer `configureUI` cannot express. */
-const UIDefaultsContext = createContext<UIConfig>();
+/**
+ * Subtree-scoped defaults. The layer `configureUI` cannot express.
+ *
+ * The empty default is load-bearing under 2.0, where `useContext` throws
+ * `ContextNotFoundError` instead of returning `undefined` when nothing above
+ * has provided a value. Every component built here reads this context and most
+ * trees never mount a `<UIDefaults>`, so a default-less context would make an
+ * unconfigured application throw on its first render. 1.9 reads the same
+ * default the same way, so this is one spelling rather than a branch.
+ */
+const UIDefaultsContext = createContext<UIConfig>({});
 
 export function UIDefaults(
   props: { children: JSX.Element } & UIConfig,
 ): JSX.Element {
-  const [, overrides] = splitProps(props, ["children"]);
+  const overrides = rest(props as unknown as Record<string, unknown>, [
+    "children",
+  ]);
   const inherited = useContext(UIDefaultsContext);
 
   // Merged with anything above rather than replacing it, so nesting two
   // providers configuring different components composes instead of clobbering.
   const value = createMemo<UIConfig>(() => ({
-    ...(inherited ?? {}),
+    ...inherited,
     ...(overrides as UIConfig),
   }));
 
-  return createComponent(UIDefaultsContext.Provider, {
+  return createComponent(providerOf<UIConfig>(UIDefaultsContext), {
     get value() {
       return value();
     },
@@ -145,6 +232,29 @@ export function defineComponent<
   /** The slot this component renders as itself. See `slot` on the config. */
   const rootSlot = (config.slot ?? "root") as string;
 
+  // Which bucket each declared key belongs to, decided once per component
+  // rather than once per render. `splitProps` made the buckets disjoint by
+  // construction: a key named in two lists landed in the earlier one only.
+  // Picking by name does not, so first claim wins here instead. The order
+  // decides real cases - a recipe that declares `size` and a component whose
+  // logic also wants `size` must not hand the logic a prop the presentation
+  // cascade has already resolved.
+  const claimed = new Set<string>();
+  const claim = (keys: readonly string[]): string[] => {
+    const own: string[] = [];
+    for (const key of keys) {
+      if (claimed.has(key)) continue;
+      claimed.add(key);
+      own.push(key);
+    }
+    return own;
+  };
+  const presentationOwn = claim(presentationKeys);
+  const escapeOwn = claim(ESCAPE_KEYS);
+  const behaviourOwn = claim(behaviourKeys);
+  /** Everything routed somewhere. What is left over is plain HTML. */
+  const routedKeys = [...presentationOwn, ...escapeOwn, ...behaviourOwn];
+
   const compiled = recipe.config._layouts;
 
   return function LayoutComponent(outer: ComponentProps<R, Model>) {
@@ -177,12 +287,14 @@ export function defineComponent<
     // The fourth bucket is not optional. Without it `id`, `onClick`,
     // `aria-label` and `data-testid` were swallowed as behaviour and never
     // reached the DOM at all.
-    const [presentation, escape, behaviour, passthrough] = splitProps(
-      props,
-      presentationKeys,
-      ["class", "className", "style", "children"],
-      behaviourKeys as string[],
-    );
+    //
+    // One `splitProps` call used to return all four. Solid 2 has only the
+    // remainder half of it, so the three routed buckets are picked by name and
+    // the fourth still falls out of one call, as before.
+    const presentation = pick(props, presentationOwn);
+    const escape = pick(props, escapeOwn);
+    const behaviour = pick(props, behaviourOwn);
+    const passthrough = rest(props, routedKeys);
 
     // `slotId` reaches the logic as well as the layout: an accordion item has
     // to hand its trigger's id to `aria-controls` on the panel, and that is a
@@ -201,7 +313,7 @@ export function defineComponent<
       const atCallSite = (presentation as Record<string, unknown>)[key];
       if (atCallSite !== undefined) return atCallSite;
       return (
-        subtree?.[componentName]?.[key] ??
+        subtree[componentName]?.[key] ??
         globalDefaultsFor(componentName)?.[key] ??
         config.defaults?.[key] ??
         // The recipe's own, so a default can live beside the axis it defaults
@@ -345,11 +457,16 @@ export function defineComponent<
           ...spreadable(() => resolved()[rootSlot] as SlotAttrs),
         });
 
-    if (!provide) return rendered;
+    // Nothing to provide means no wrapper, and under 2.0 that is a correctness
+    // rule rather than an optimisation: a provider counts as having provided
+    // even when its value is `undefined`, and `useContext` throws on an
+    // undefined value, so an empty provider would shadow a real one above it
+    // with a throw. Under 1.9 the two spellings are indistinguishable.
+    if (!provide || !model || !("context" in model)) return rendered;
 
-    return createComponent(provide.Provider, {
+    return createComponent(providerOf(provide), {
       get value() {
-        return model?.context;
+        return model.context;
       },
       get children() {
         return rendered;
