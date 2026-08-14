@@ -17,7 +17,8 @@ pub mod linter;
 pub mod match_layouts;
 
 use layouts_common::{
-    CompilerMode, Diagnostic, FileKind, LibraryOutput, Severity, TransformOptions, TransformResult,
+    CompilerMode, Diagnostic, FileKind, LibraryOutput, Severity, SolidVersion, TransformOptions,
+    TransformResult,
 };
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -124,7 +125,13 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
 
     let code = match options.mode {
         CompilerMode::Library => {
-            compile_library_source(source, &parsed.program, &layouts, options.library_output)
+            compile_library_source(
+                source,
+                &parsed.program,
+                &layouts,
+                options.library_output,
+                options.solid,
+            )
         }
         CompilerMode::Application => compile_application_source(source, &parsed.program, options),
     };
@@ -215,6 +222,7 @@ fn compile_library_source(
     program: &Program<'_>,
     layouts: &[FoundLayout],
     output: LibraryOutput,
+    solid: SolidVersion,
 ) -> String {
     let recipes = compile_recipe::find_recipes(program);
     let index = compile_recipe::SlotIndex::build(&recipes);
@@ -252,9 +260,15 @@ fn compile_library_source(
     let unresolved = semantic.scoping().root_unresolved_references();
 
     if output == LibraryOutput::Component && !layouts.is_empty() {
+        // The boundary specifier is the only part of this header a major of
+        // Solid changes. `Component` is still exported from `solid-js` in 2.0,
+        // so the type import is the same line either way.
         edits.push(SourceEdit::Insert {
             at: 0,
-            text: "import { defineComponent as __defineLayoutComponent } from \"solid-layouts/application-boundary\";\nimport type { Component as __LayoutComponent } from \"solid-js\";\n".to_owned(),
+            text: format!(
+                "import {{ defineComponent as __defineLayoutComponent }} from \"{}\";\nimport type {{ Component as __LayoutComponent }} from \"solid-js\";\n",
+                solid.application_boundary(),
+            ),
         });
     }
 
@@ -775,6 +789,54 @@ export const Button: Layout<typeof button, ButtonProps> = () => {
             parsed.diagnostics,
             result.code
         );
+    }
+
+    #[test]
+    fn the_solid_major_picks_which_runtime_entry_the_boundary_imports() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { button } from "./Button.recipe";
+export const Button: Layout<typeof button, ButtonProps> = () => {
+  return <button>{props.children}</button>;
+};
+"#;
+        let boundary_of = |solid| {
+            let mut options = TransformOptions::new("Button.layout.tsx", CompilerMode::Library);
+            options.library_output = LibraryOutput::Component;
+            options.solid = solid;
+            transform(source, &options).code
+        };
+
+        // Default and explicit 1 are the same output, which is the point: a
+        // host that never sets the option keeps emitting what it always did.
+        let default = boundary_of(SolidVersion::default());
+        assert_eq!(default, boundary_of(SolidVersion::V1));
+        assert!(
+            default.contains("from \"solid-layouts/application-boundary\""),
+            "{default}"
+        );
+
+        let v2 = boundary_of(SolidVersion::V2);
+        assert!(
+            v2.contains("from \"solid-layouts/solid-2/application-boundary\""),
+            "{v2}"
+        );
+        // The type import is not version-specific: 2.0 still exports
+        // `Component` from `solid-js`.
+        assert!(
+            v2.contains("import type { Component as __LayoutComponent } from \"solid-js\";"),
+            "{v2}"
+        );
+    }
+
+    #[test]
+    fn solid_2_renderer_builtins_need_no_layout() {
+        let source = r#"import { Loading, Errored } from "solid-js";
+import { Portal } from "@solidjs/web";
+export const View = () => <Loading><Errored><Portal /></Errored></Loading>;
+"#;
+        let options = TransformOptions::new("View.tsx", CompilerMode::Application);
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
     }
 
     #[test]
