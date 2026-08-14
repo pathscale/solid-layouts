@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist/solid-2",
+    "rootDir": "solid-2-staging",
+    "jsxImportSource": "@solidjs/web"
+  },
+  "include": ["solid-2-staging"],
+  "exclude": ["solid-2-staging/**/*.test.ts", "solid-2-staging/__parity__"]
+}

@@ -12,5 +12,9 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // The Solid 2.0 renderer is checked by `tsconfig.solid-2.json`, against the
+  // Solid it targets. Checking it here would mean checking `@solidjs/web`
+  // against 1.9, which answers nothing.
+  "exclude": ["src/renderer.solid-2.ts"]
 }

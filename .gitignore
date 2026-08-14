@@ -10,3 +10,4 @@ packages/*/index.d.ts
 !packages/solid-layouts-oxc/index.d.ts
 !packages/rsbuild-plugin-solid-layouts/index.js
 !packages/rsbuild-plugin-solid-layouts/index.d.ts
+packages/solid-layouts/solid-2-staging/

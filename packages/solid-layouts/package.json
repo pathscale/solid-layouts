@@ -23,21 +23,44 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./solid-2": {
+      "types": "./dist/solid-2/index.d.ts",
+      "import": "./dist/solid-2/index.js"
+    },
+    "./solid-2/recipe": {
+      "types": "./dist/solid-2/recipe.d.ts",
+      "import": "./dist/solid-2/recipe.js"
+    },
+    "./solid-2/cx": {
+      "types": "./dist/solid-2/cx.d.ts",
+      "import": "./dist/solid-2/cx.js"
+    },
+    "./solid-2/application-boundary": {
+      "types": "./dist/solid-2/index.d.ts",
+      "import": "./dist/solid-2/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "node scripts/build.mjs",
     "prepack": "bun run build",
     "test": "bun test --conditions=browser",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "solid-js": "^1.9.14"
+    "@solidjs/web": "^2.0.0-rc.0",
+    "solid-js": "^1.9.14 || ^2.0.0-rc.0"
+  },
+  "peerDependenciesMeta": {
+    "@solidjs/web": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@solidjs/web": "2.0.0-rc.0",
     "@types/bun": "^1.3.14",
     "happy-dom": "^20.11.2",
     "typescript": "^7.0.2"
