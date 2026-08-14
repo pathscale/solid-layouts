@@ -274,15 +274,25 @@ fn compile_library_source(
             })
         });
 
+        // `children` is read through the parameter, never destructured out of
+        // it.
+        //
+        // The runtime exposes it as a getter over Solid's resolved-children
+        // memo, so destructuring calls that getter once, at the moment the
+        // layout runs, and freezes the result. Whatever the children evaluate
+        // to on that first pass is what stays in the document forever: a
+        // `<For>` over a list that is still empty resolves to nothing and never
+        // runs again, so the rows never appear no matter how the list changes.
+        // Solid's JSX compiler is what makes the difference — it wraps a member
+        // expression in a getter and leaves a plain identifier alone — so
+        // emitting `_stable.children` is what keeps the insert reactive.
+        //
+        // `slot` moves with it for the same reason it is safe to: the layout
+        // reads `slot.root` off the object either way.
         edits.push(SourceEdit::Replace {
             start: parameters_span.start as usize,
             end: parameters_span.end as usize,
-            text: if uses_slots {
-                "({ slot, children }, p)"
-            } else {
-                "(_stable, p)"
-            }
-            .to_owned(),
+            text: "(_stable, p)".to_owned(),
         });
 
         if output == LibraryOutput::Component {
@@ -331,8 +341,16 @@ fn compile_library_source(
 
                 let replacement = match (uses_slots, name.as_str()) {
                     (_, "local" | "props" | "rawProps") => "p".to_owned(),
+                    // Both come off the first parameter now rather than out of
+                    // a destructuring pattern. `children` has to, to stay
+                    // reactive; `slot` follows so the parameter has one shape.
+                    // Unconditional, because a layout may use `children`
+                    // without ever mentioning `slot`, and that one used to
+                    // compile to an unbound reference.
+                    (_, "slot") => "_stable.slot".to_owned(),
+                    (_, "children") => "_stable.children".to_owned(),
                     (false, _) => continue,
-                    (true, "slot" | "children" | "p") => continue,
+                    (true, "p") => continue,
                     (true, name) if is_runtime_global(name) => continue,
                     (true, name) => format!("p.{name}"),
                 };
@@ -590,6 +608,73 @@ export const AccordionTriggerLayout: Layout<typeof accordionTrigger> =
         assert!(!result.changed);
     }
 
+    /// `children` must reach the element as a member expression.
+    ///
+    /// Solid's JSX compiler decides reactivity by the shape of the expression:
+    /// a member expression becomes a getter it re-reads, a plain identifier is
+    /// read once and inserted. The runtime hands `children` over as a getter
+    /// over a resolved-children memo, so a destructured binding captures one
+    /// snapshot — and a layout whose children are empty on the first render
+    /// then keeps rendering nothing forever. That is not a subtle degradation:
+    /// it is a `<For>` over a list that arrives asynchronously never appearing
+    /// at all.
+    #[test]
+    fn children_are_read_through_the_parameter_so_they_stay_reactive() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { viewport } from "./Viewport.recipe";
+const Viewport: Layout<typeof viewport, ViewportProps> = () => (
+  <div {...slot.root}>{children}</div>
+);
+"#;
+        let result = transform(
+            source,
+            &TransformOptions::new("Viewport.layout.tsx", CompilerMode::Library),
+        );
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.code.contains("{_stable.children}"),
+            "children must be a member expression: {}",
+            result.code
+        );
+        assert!(
+            !result.code.contains("{ slot, children }"),
+            "children must not be destructured: {}",
+            result.code
+        );
+        assert!(
+            result.code.contains("_stable.slot.root"),
+            "slot moves with it: {}",
+            result.code
+        );
+
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &result.code, SourceType::tsx()).parse();
+        assert!(
+            parsed.diagnostics.is_empty(),
+            "output must parse: {:?}",
+            parsed.diagnostics
+        );
+    }
+
+    /// A layout may use `children` and never mention `slot`.
+    #[test]
+    fn children_are_bound_even_when_the_layout_has_no_slots() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { bare } from "./Bare.recipe";
+const Bare: Layout<typeof bare, BareProps> = () => <div>{children}</div>;
+"#;
+        let result = transform(
+            source,
+            &TransformOptions::new("Bare.layout.tsx", CompilerMode::Library),
+        );
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.code.contains("{_stable.children}"),
+            "an unbound `children` would be a ReferenceError: {}",
+            result.code
+        );
+    }
+
     #[test]
     fn compiles_template_parameters_and_unbound_model_references() {
         let source = r#"import type { Layout } from "solid-layouts";
@@ -604,8 +689,9 @@ const Icon: Layout<typeof icon, IconProps> = () => {
             &TransformOptions::new("Icon.layout.tsx", CompilerMode::Library),
         );
         assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.code.contains("(_stable, p) =>"), "{}", result.code);
         assert!(
-            result.code.contains("({ slot, children }, p) =>"),
+            result.code.contains("{_stable.children}"),
             "{}",
             result.code
         );

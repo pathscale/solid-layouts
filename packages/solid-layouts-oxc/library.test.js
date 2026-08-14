@@ -53,7 +53,10 @@ test("builds valid generated Layout source and a package manifest", () => {
     "utf8",
   );
 
-  expect(layout).toContain("({ slot, children }, p) =>");
+  // Not destructured: `children` has to stay a member expression or Solid
+  // inserts it once and the layout can never update it.
+  expect(layout).toContain("(_stable, p) =>");
+  expect(layout).not.toContain("{ slot, children }");
   expect(layout).toContain("p.width");
   expect(layout).not.toContain("local.width");
   expect(recipe).toContain("_layouts:");
