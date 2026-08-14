@@ -3,6 +3,7 @@
 const { afterEach, expect, test } = require("bun:test");
 const {
   cpSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -10,7 +11,9 @@ const {
 } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
-const { compileLibrary, lintLibrary } = require("./library.js");
+const { compileLibrary, lintLibrary ,
+  emitSourceManifest,
+} = require("./library.js");
 
 const temporary = [];
 
@@ -135,4 +138,39 @@ test("accepts a formatted multiline Layout annotation", () => {
   writeFileSync(layoutPath, layout);
 
   expect(() => compileLibrary({ root })).not.toThrow();
+});
+
+test("the manifest is derived from the package's own entries, not a declared list", () => {
+  // The list used to live in `layouts.library.json` as an `exports` array, which
+  // is the same information as the package's entry files and could only drift
+  // from them. It did: a library renamed eleven components and the manifest kept
+  // the old names, so the application compiler rejected every new one and
+  // accepted names that no longer existed.
+  const root = mkdtempSync(join(tmpdir(), "layouts-manifest-"));
+  mkdirSync(join(root, "src/components/alert"), { recursive: true });
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ name: "@scope/kit", version: "1.0.0", exports: { ".": "./dist/index.js" } }),
+  );
+  writeFileSync(
+    join(root, "layouts.library.json"),
+    JSON.stringify({ mode: "source", source: "src/components", output: "dist" }),
+  );
+  writeFileSync(
+    join(root, "src/index.ts"),
+    [
+      'export { Alert } from "./components/alert";',
+      'export type { AlertProps } from "./components/alert";',
+      'export { FLAVORS } from "./constants";',
+    ].join("\n"),
+  );
+
+  const { manifest } = emitSourceManifest({ root });
+  const names = Object.keys(manifest.components);
+
+  expect(names).toContain("Alert");
+  // A type is not a component.
+  expect(names).not.toContain("AlertProps");
+  // Neither is a constant.
+  expect(names).not.toContain("FLAVORS");
 });

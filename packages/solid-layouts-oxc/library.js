@@ -225,9 +225,6 @@ function generateLibrarySource(options = {}) {
   if (config.mode !== "source") {
     throw new Error(`${configPath || root} must set mode to "source" for adjacent generation`);
   }
-  if (!Array.isArray(config.exports) || config.exports.length === 0) {
-    throw new Error(`${configPath} must declare its public Layout exports`);
-  }
   const lint = lintLibrary({ ...options, root });
   if (lint.failed) {
     throw new Error(lint.diagnostics.map((item) =>
@@ -251,14 +248,82 @@ function generateLibrarySource(options = {}) {
   return { ...lint, changed };
 }
 
+/**
+ * Every value a consumer can import from this package.
+ *
+ * Derived rather than declared. This used to be an `exports` array in
+ * `layouts.library.json`, which is the same list as the package's own entry
+ * files and can therefore only ever drift from them. It did: a library renamed
+ * eleven components, rebuilt, and the manifest still carried the old names, so
+ * the application compiler rejected the new ones and accepted names that no
+ * longer existed. Nothing reported it, because nothing compared the two.
+ *
+ * Read from source rather than from the built output, because the manifest is
+ * emitted alongside a build rather than after one, and a bundler that has not
+ * run yet leaves nothing to parse.
+ */
+function publicComponentNames(root, config) {
+  const packageJson = readJson(resolve(root, "package.json"));
+  const outputDir = config.output || "dist";
+  const targets = new Set();
+  const collect = (value) => {
+    if (typeof value === "string") return targets.add(value);
+    if (value && typeof value === "object") {
+      for (const nested of Object.values(value)) collect(nested);
+    }
+  };
+  collect(packageJson.exports ?? {});
+  for (const field of ["module", "main", "types"]) {
+    if (typeof packageJson[field] === "string") targets.add(packageJson[field]);
+  }
+
+  const names = new Set();
+  const seen = new Set();
+  for (const target of targets) {
+    const relativeTarget = target.replace(/^\.\//, "");
+    if (!relativeTarget.startsWith(`${outputDir}/`)) continue;
+    const stem = relativeTarget.slice(outputDir.length + 1).replace(/\.(js|mjs|cjs|d\.ts)$/, "");
+    // The built entry maps back to the source file of the same name. A package
+    // laid out differently still works: the built file is the fallback.
+    const candidates = [
+      resolve(root, "src", `${stem}.ts`),
+      resolve(root, "src", `${stem}.tsx`),
+      resolve(root, relativeTarget),
+    ];
+    const entry = candidates.find((path) => existsSync(path));
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    for (const name of namedExportsOf(readFileSync(entry, "utf8"))) names.add(name);
+  }
+  return [...names].sort();
+}
+
+/** Exported value names, ignoring types: a type is not a component. */
+function namedExportsOf(source) {
+  const names = new Set();
+  for (const match of source.matchAll(/export\s*\{([^}]+)\}/g)) {
+    const isTypeOnly = /export\s*type\s*\{$/.test(source.slice(0, match.index + match[0].indexOf("{") + 1).trimEnd());
+    for (const value of match[1].split(",")) {
+      const item = value.trim();
+      if (!item || item.startsWith("type ")) continue;
+      const exported = item.split(/\s+as\s+/).at(-1)?.trim();
+      if (!exported || isTypeOnly) continue;
+      // PascalCase only. SCREAMING_SNAKE is a constant, and a package that
+      // exports `FLAVORS` beside `Flavor` is exporting a value, not a component.
+      if (/^[A-Z]/.test(exported) && !/^[A-Z0-9_]+$/.test(exported)) names.add(exported);
+    }
+  }
+  return names;
+}
+
 function emitSourceManifest(options = {}) {
   const root = resolve(options.root || process.cwd());
   const { configPath, config } = readLibraryConfig(root, options);
   if (config.mode !== "source") throw new Error(`${configPath || root} is not a source library config`);
-  const exports = config.exports || [];
-  if (exports.length === 0) throw new Error(`${configPath} must declare its public Layout exports`);
-  const duplicates = exports.filter((name, index) => exports.indexOf(name) !== index);
-  if (duplicates.length) throw new Error(`${configPath} repeats Layout export ${duplicates[0]}`);
+  const exports = publicComponentNames(root, config);
+  if (exports.length === 0) {
+    throw new Error(`${root}: no public component exports found through package.json`);
+  }
   const sourcePackage = readJson(resolve(root, "package.json"));
   const outputRoot = resolve(root, config.output || "dist");
   const components = Object.fromEntries(
