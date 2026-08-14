@@ -23,13 +23,13 @@ type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "disabled">
   className?: string;
 };
 
-const Button: Layout<typeof button, ButtonProps> = ({ slot, children }, p) => {
+const Button: Layout<typeof button, ButtonProps> = (_stable, p) => {
   const disabled = Boolean(p.isDisabled) || Boolean(p.isPending);
 
   return (
     <button
       type="button"
-      {...slot.root}
+      {..._stable.slot.root}
       data-pending={p.isPending ? "true" : "false"}
       data-selected={p.isSelected ? "true" : "false"}
       disabled={disabled}
@@ -45,14 +45,14 @@ const Button: Layout<typeof button, ButtonProps> = ({ slot, children }, p) => {
       }}
     >
       <Show when={p.isPending}>
-        <span {...slot.spinner} aria-hidden="true" />
+        <span {..._stable.slot.spinner} aria-hidden="true" />
       </Show>
       <Show when={p.startIcon}>
-        <span {...slot.startIcon}>{p.startIcon}</span>
+        <span {..._stable.slot.startIcon}>{p.startIcon}</span>
       </Show>
-      {children}
+      {_stable.children}
       <Show when={p.endIcon}>
-        <span {...slot.endIcon}>{p.endIcon}</span>
+        <span {..._stable.slot.endIcon}>{p.endIcon}</span>
       </Show>
     </button>
   );

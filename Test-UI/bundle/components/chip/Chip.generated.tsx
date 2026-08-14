@@ -19,20 +19,20 @@ export type ChipProps = Omit<JSX.HTMLAttributes<HTMLSpanElement>, "color"> & {
   className?: string;
 };
 
-const Chip: Layout<typeof chip, ChipProps> = ({ slot, children }, p) => (
+const Chip: Layout<typeof chip, ChipProps> = (_stable, p) => (
   <span
-    {...slot.root}
+    {..._stable.slot.root}
     data-disabled={p.isDisabled ? "true" : "false"}
     data-removable={p.onRemove ? "true" : "false"}
   >
     <Show when={p.startIcon}>
-      <span {...slot.startIcon}>{p.startIcon}</span>
+      <span {..._stable.slot.startIcon}>{p.startIcon}</span>
     </Show>
-    <span {...slot.label}>{children}</span>
+    <span {..._stable.slot.label}>{_stable.children}</span>
     <Show when={p.onRemove && p.endIcon}>
       <button
         type="button"
-        {...slot.remove}
+        {..._stable.slot.remove}
         aria-label={p.removeButtonLabel ?? "Remove"}
         disabled={Boolean(p.isDisabled)}
         onClick={(event) => {
@@ -40,11 +40,11 @@ const Chip: Layout<typeof chip, ChipProps> = ({ slot, children }, p) => (
           p.onRemove?.();
         }}
       >
-        <span {...slot.removeIcon}>{p.endIcon}</span>
+        <span {..._stable.slot.removeIcon}>{p.endIcon}</span>
       </button>
     </Show>
     <Show when={!p.onRemove && p.endIcon}>
-      <span {...slot.endIcon}>{p.endIcon}</span>
+      <span {..._stable.slot.endIcon}>{p.endIcon}</span>
     </Show>
   </span>
 );

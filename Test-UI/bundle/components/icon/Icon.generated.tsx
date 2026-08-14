@@ -12,17 +12,17 @@ export type IconProps = IComponentBaseProps & {
   name?: string;
 };
 
-const Icon: Layout<typeof icon, IconProps> = ({ slot, children }, p) => {
+const Icon: Layout<typeof icon, IconProps> = (_stable, p) => {
   const width = p.width ?? 24;
   const height = p.height ?? 24;
 
   const classes = createMemo(() =>
-    twMerge(slot.root.class, p.name, p.class, p.className),
+    twMerge(_stable.slot.root.class, p.name, p.class, p.className),
   );
 
   return (
     <span
-      {...slot.root}
+      {..._stable.slot.root}
       {...{ class: classes() }}
       style={{
         width: `${width}px`,
