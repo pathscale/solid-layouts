@@ -260,8 +260,7 @@ const SOLID_BUILTINS: &[&str] = &[
 /// `@solidjs/web` does not exist under 1.9, so admitting all three cannot make
 /// one major accept the other's import.
 fn is_solid_builtin(name: &str, source: &str) -> bool {
-    SOLID_BUILTINS.contains(&name)
-        && matches!(source, "solid-js" | "solid-js/web" | "@solidjs/web")
+    SOLID_BUILTINS.contains(&name) && matches!(source, "solid-js" | "solid-js/web" | "@solidjs/web")
 }
 
 /// Checks every component reference against the configured Layout sources.

@@ -124,15 +124,13 @@ pub fn transform(source: &str, options: &TransformOptions) -> TransformResult {
     }
 
     let code = match options.mode {
-        CompilerMode::Library => {
-            compile_library_source(
-                source,
-                &parsed.program,
-                &layouts,
-                options.library_output,
-                options.solid,
-            )
-        }
+        CompilerMode::Library => compile_library_source(
+            source,
+            &parsed.program,
+            &layouts,
+            options.library_output,
+            options.solid,
+        ),
         CompilerMode::Application => compile_application_source(source, &parsed.program, options),
     };
     let changed = code != source;
