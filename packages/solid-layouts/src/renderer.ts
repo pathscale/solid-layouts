@@ -27,8 +27,9 @@ import { splitProps } from "solid-js";
  * This moved here from `component.ts`, which used to pick between `splitProps`
  * and `omit` by reading the module object at load. That is correct at runtime
  * and cannot be bundled: a bundler resolves *both* arms of the conditional
- * against the installed `solid-js`, so the 2.0 arm's `splitProps` is a missing
- * export and the build fails to link before any of it runs.
+ * against the installed `solid-js`, so when bundling against Solid 2 the 1.9
+ * arm's `splitProps` is a missing export and the build fails to link before
+ * the branch can run.
  *
  * Which major is present is exactly what this file already encodes, so the
  * choice belongs here, where only one arm is ever compiled.
