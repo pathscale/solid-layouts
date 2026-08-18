@@ -1,8 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
+// `dist/` is a build artefact and CI runs tests without building, so this
+// builds on demand rather than asserting against whatever happens to be there.
+if (!existsSync(join(ROOT, "dist/solid-2/renderer.js"))) {
+  execFileSync("node", ["scripts/build.mjs"], { cwd: ROOT, stdio: "inherit" });
+}
 
 /**
  * Neither build may mention the other major's spelling of `rest`.
