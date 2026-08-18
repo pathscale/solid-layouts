@@ -153,3 +153,33 @@ jobs:
       - name: Fail if the checked-in package fixture was stale
         working-directory: .
         run: git diff --exit-code -- Test-UI/bundle
+
+  solid-2-consumer:
+    name: solid 2 consumer (rspack links it)
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      # The package is developed against an installed Solid 1.9, so every other
+      # job type-checks and runs the 2.0 sources against the wrong major. This
+      # one installs Solid 2 for real and asks a bundler to link the 2.0 entry.
+      #
+      # It exists because the bug it guards is a *link* error, invisible to a
+      # runtime check: the conditional it came from picked the correct arm when
+      # executed and still could not be bundled, because a bundler resolves
+      # both arms against the installed Solid. Verified by reintroducing that
+      # conditional, which fails this job with the original message:
+      #
+      #   ESModulesLinkingError: export 'splitProps' (imported as 'solid') was
+      #   not found in 'solid-js'
+      - name: Build the package
+        working-directory: packages/solid-layouts
+        run: bun install && bun run build
+
+      - name: Bundle a Solid 2 consumer through rspack
+        working-directory: fixtures/solid-2-consumer
+        run: bun install && bun run bundle

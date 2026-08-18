@@ -1,0 +1,16 @@
+{
+  "name": "solid-2-consumer-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle": "rspack build -c rspack.config.mjs"
+  },
+  "dependencies": {
+    "@solidjs/web": "2.0.0-rc.0",
+    "solid-js": "2.0.0-rc.0"
+  },
+  "devDependencies": {
+    "@rspack/cli": "^1.1.0",
+    "@rspack/core": "^1.1.0"
+  }
+}

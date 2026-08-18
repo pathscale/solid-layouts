@@ -167,3 +167,53 @@ The 11 `@solid-primitives/*` packages `@pathscale/ui` depends on peer-pin
 which change signature. They break at runtime, not at install, and no work here
 fixes that. Either upstream ships Solid 2 releases, or the four or five we
 actually use get vendored.
+
+## Correction, 2026-08-18: runtime detection cannot be bundled
+
+The table above records three differences as "told apart at runtime from the
+module object itself, so they needed no fork at all". For `splitProps`/`omit`
+that was wrong, and it was wrong in a way no test in this repository could
+see.
+
+`"omit" in solid ? solid.omit(...) : solid.splitProps(...)` picks the correct
+arm every time it executes. It still cannot be linked: a bundler resolves
+*both* arms against the installed `solid-js`, so when a consumer bundles
+against Solid 2 the 1.9 arm's `splitProps` is a missing export and the build
+fails before any of it runs.
+
+    ESModulesLinkingError: export 'splitProps' (imported as 'solid') was not
+    found in 'solid-js'
+
+It reached a consumer as a build that would not start, and every job here was
+green at the time, because all of them run this package against the installed
+Solid 1.9 and none of them asked a bundler to link the 2.0 entry.
+
+**The rule this yields:** a difference between majors belongs in `renderer.ts`,
+which the build already swaps, not in a runtime conditional. Only the arm that
+exists is then compiled. Runtime detection is fine for a value that varies
+within one major, and never for one that varies between them.
+
+**The guard:** `fixtures/solid-2-consumer` installs `solid-js@2.0.0-rc.0` and
+`@solidjs/web@2.0.0-rc.0`, imports the package's `solid-2` entry, and bundles
+it with Rspack, which is the linker that produced the original failure. The
+`solid-2-consumer` CI job runs it. Reintroducing the conditional fails that job
+with the message above, which was checked rather than assumed.
+
+**What it does not cover.** The fixture imports the entry and calls into it; it
+writes no JSX, so it exercises the Solid 2 *runtime* and not the Solid 2
+*compiler*. Those are separate choices: a consumer must also point its JSX
+transform at Solid 2 (`babel-preset-solid@2`, whose `moduleName` defaults to
+`@solidjs/web`), and a build that gets the runtime right and the transform
+wrong emits `solid-js/web` imports, a subpath 2.0 removed. Covering that means
+a second fixture that compiles a component, and it is not covered here.
+
+Two traps found while writing the fixture, both worth knowing before touching
+it:
+
+- Aliasing `solid-layouts` to the package root does not work. An alias replaces
+  the whole specifier, so the `/solid-2` subpath export is never consulted; the
+  alias has to name the built entry.
+- Solid must be aliased to the *fixture's* copy. Otherwise the bundler walks up
+  to `packages/solid-layouts/node_modules` and links `@solidjs/web` 2.0 against
+  Solid 1.9, which fails on a dozen unrelated exports and says nothing about
+  the code under test.
