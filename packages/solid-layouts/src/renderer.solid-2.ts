@@ -14,3 +14,25 @@
  */
 export type { JSX } from "@solidjs/web";
 export { Dynamic, createComponent } from "@solidjs/web";
+
+import * as solid from "solid-js";
+
+/**
+ * `props` without `keys`. See the 1.9 twin for why this lives here.
+ *
+ * Reached through the module object because this package is developed against
+ * an installed 1.9, whose types do not declare `omit`. Unlike the conditional
+ * this replaced, there is no second arm for a bundler to resolve: only the
+ * name that exists at runtime in 2.0 is ever read.
+ */
+const { omit } = solid as unknown as {
+  omit(
+    props: Record<string, unknown>,
+    ...keys: string[]
+  ): Record<string, unknown>;
+};
+
+export const rest = (
+  props: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> => omit(props, ...(keys as string[]));

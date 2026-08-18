@@ -18,3 +18,22 @@
  */
 export type { JSX } from "solid-js";
 export { Dynamic, createComponent } from "solid-js/web";
+
+import { splitProps } from "solid-js";
+
+/**
+ * `props` without `keys`, still tracked.
+ *
+ * This moved here from `component.ts`, which used to pick between `splitProps`
+ * and `omit` by reading the module object at load. That is correct at runtime
+ * and cannot be bundled: a bundler resolves *both* arms of the conditional
+ * against the installed `solid-js`, so the 2.0 arm's `splitProps` is a missing
+ * export and the build fails to link before any of it runs.
+ *
+ * Which major is present is exactly what this file already encodes, so the
+ * choice belongs here, where only one arm is ever compiled.
+ */
+export const rest = (
+  props: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> => splitProps(props, keys as string[])[1];
