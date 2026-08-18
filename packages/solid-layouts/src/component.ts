@@ -1,4 +1,3 @@
-import * as solid from "solid-js";
 import {
   type Context,
   children as resolveChildren,
@@ -10,42 +9,8 @@ import type { ComponentDefaults, UIConfig } from "./defaults.js";
 import { globalDefaultsFor } from "./defaults.js";
 import { __nextInstance, __slotId } from "./ids.js";
 import type { Recipe } from "./recipe.js";
-import { Dynamic, type JSX, createComponent } from "./renderer.js";
+import { Dynamic, type JSX, createComponent, rest } from "./renderer.js";
 import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types.js";
-
-/**
- * `props` without `keys`, still tracked.
- *
- * 1.9 spells this `splitProps(props, keys)[1]`. 2.0 renamed it to `omit`, made
- * it variadic, and took `splitProps` away.
- *
- * Detected from the module object rather than configured, and resolved once at
- * load rather than branched per call. Which one is there is a fact about the
- * `solid-js` that got installed, and no build flag can be more right about that
- * than the module itself; a flag can only disagree with it.
- */
-type Solid1Props = {
-  splitProps(
-    props: Record<string, unknown>,
-    keys: string[],
-  ): [Record<string, unknown>, Record<string, unknown>];
-};
-type Solid2Props = {
-  omit(
-    props: Record<string, unknown>,
-    ...keys: string[]
-  ): Record<string, unknown>;
-};
-
-const rest: (
-  props: Record<string, unknown>,
-  keys: readonly string[],
-) => Record<string, unknown> =
-  "omit" in solid
-    ? (props, keys) =>
-        (solid as unknown as Solid2Props).omit(props, ...keys)
-    : (props, keys) =>
-        (solid as unknown as Solid1Props).splitProps(props, keys as string[])[1];
 
 /**
  * The component that provides a context's value.
