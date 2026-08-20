@@ -186,7 +186,7 @@ function resolvePublicPackageEntry(root, module, subpath = ".") {
   );
 }
 
-function validateComponent(module, packageRoot, name, component) {
+function validateComponent(module, packageRoot, name, component, solid) {
   if (component?.kind === "embedded") return;
   if (component?.kind !== "generated") {
     throw new Error(`${module}: component ${name} has unsupported manifest kind ${JSON.stringify(component?.kind)}`);
@@ -214,7 +214,19 @@ function validateComponent(module, packageRoot, name, component) {
     }
   }
 
-  if (!entrySource.includes(APPLICATION_BOUNDARY)) {
+  /*
+   * The boundary this major actually emits, not the 1.9 one.
+   *
+   * `boundaryFor()` already encodes the mapping and the library generator uses
+   * it, so a `solid: 2` build writes `solid-layouts/solid-2/application-boundary`
+   * into the entry. Checking for the hardcoded 1.9 spelling made the pairing we
+   * generate the pairing we reject: the entry is correct and validation fails on
+   * output this package just produced.
+   *
+   * `includes` on the Solid 2 specifier is not satisfied by the 1.9 one either
+   * way round, because neither string contains the other as written.
+   */
+  if (!entrySource.includes(boundaryFor(solid).specifier)) {
     throw new Error(`${module}: ${name} entry has no application compiler boundary`);
   }
   if (!new RegExp(`\\bexport\\s+const\\s+${component.recipeExport}\\b`).test(recipeSource)) {
@@ -229,7 +241,7 @@ function validateComponent(module, packageRoot, name, component) {
   }
 }
 
-function resolveLayoutSource(root, configured) {
+function resolveLayoutSource(root, configured, solid) {
   const module = typeof configured === "string" ? configured : configured.module;
   if (!module) throw new Error("configured Layout source is missing its module name");
   const packageRoot = typeof configured === "string"
@@ -271,7 +283,7 @@ function resolveLayoutSource(root, configured) {
   }
   const exports = Object.keys(components).sort();
   if (exports.length === 0) throw new Error(`${module} Layout manifest has no components`);
-  for (const name of exports) validateComponent(module, packageRoot, name, components[name]);
+  for (const name of exports) validateComponent(module, packageRoot, name, components[name], solid);
 
   return {
     module,
@@ -291,7 +303,7 @@ function compileApplication(options = {}) {
   if (!Array.isArray(layouts) || layouts.length === 0) {
     throw new Error("application compiler requires at least one Layout package");
   }
-  const sources = layouts.map((configured) => resolveLayoutSource(root, configured));
+  const sources = layouts.map((configured) => resolveLayoutSource(root, configured, options.solid));
   const rootSources = sources.map(({ module, exports, publicEntry }) => ({
     module,
     exports,

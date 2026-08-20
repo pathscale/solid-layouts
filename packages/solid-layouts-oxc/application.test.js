@@ -266,3 +266,34 @@ test("rejects a generated entry that disagrees with its component record", () =>
     "entry call site disagrees",
   );
 });
+
+/*
+ * The boundary check has to follow the major being compiled.
+ *
+ * `boundaryFor()` already maps 1 and 2 to different specifiers, and the library
+ * generator uses it, so a `solid: 2` library writes the solid-2 spelling into
+ * its entry. Validation greping for the hardcoded 1.9 spelling made the pairing
+ * this package generates the pairing it rejects: a correct Solid 2 bundle failed
+ * with "entry has no application compiler boundary", naming a file that was
+ * exactly right.
+ */
+test("accepts a solid-2 entry when compiling for Solid 2", () => {
+  const { root, packageRoot } = fixture();
+  const copy = makePackageEditable(root, packageRoot);
+  const entryPath = join(copy, "index.ts");
+  const entry = readFileSync(entryPath, "utf8").replaceAll(
+    "solid-layouts/application-boundary",
+    "solid-layouts/solid-2/application-boundary",
+  );
+  writeFileSync(entryPath, entry);
+  expect(() =>
+    compileApplication({ root, layouts: ["@pathscale/test-ui"], solid: 2 }),
+  ).not.toThrow();
+});
+
+test("rejects a 1.9 entry when compiling for Solid 2", () => {
+  const { root, packageRoot } = fixture();
+  expect(() => compileApplication({ root, layouts: ["@pathscale/test-ui"], solid: 2 })).toThrow(
+    "entry has no application compiler boundary",
+  );
+});
