@@ -907,9 +907,7 @@ export const ButtonIcon: Layout<typeof button> = () => <i {...slot.icon} />;
 "#,
         );
         assert!(
-            diagnostics
-                .iter()
-                .all(|item| item.rule != "slot-unused"),
+            diagnostics.iter().all(|item| item.rule != "slot-unused"),
             "{}",
             diagnostics
                 .iter()
