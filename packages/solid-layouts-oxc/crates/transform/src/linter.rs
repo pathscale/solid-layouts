@@ -174,6 +174,15 @@ struct RenderedSlot {
     slot_api: bool,
 }
 
+struct RecipeUsage {
+    rendered: HashSet<String>,
+    has_legacy_layout: bool,
+    filename: String,
+    source: String,
+    span: Span,
+    recipe_name: String,
+}
+
 impl<'a> Visit<'a> for Usage {
     fn visit_member_expression(&mut self, member: &MemberExpression<'a>) {
         if let Expression::Identifier(object) = member.object()
@@ -276,6 +285,7 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
         .map(|file| canonical(Path::new(&file.filename)))
         .collect();
     let mut recipes: HashMap<(String, String), Recipe> = HashMap::new();
+    let mut recipe_usage: HashMap<(String, String), RecipeUsage> = HashMap::new();
     let mut diagnostics = Vec::new();
 
     for file in files {
@@ -367,7 +377,8 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                 });
                 continue;
             };
-            let Some(recipe) = recipes.get(&(recipe_file, export_name.clone())) else {
+            let recipe_key = (recipe_file, export_name.clone());
+            let Some(recipe) = recipes.get(&recipe_key) else {
                 diagnostics.push(ProjectDiagnostic {
                     filename: file.filename.clone(),
                     source: file.source.clone(),
@@ -390,6 +401,22 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                 rendered.iter().map(|slot| slot.name.as_str()).collect();
             let declared_names: HashSet<_> =
                 recipe.slots.iter().map(|(name, _)| name.as_str()).collect();
+            let uses_slot_api = rendered.iter().any(|slot| slot.slot_api);
+
+            let aggregate = recipe_usage
+                .entry(recipe_key)
+                .or_insert_with(|| RecipeUsage {
+                    rendered: HashSet::new(),
+                    has_legacy_layout: false,
+                    filename: file.filename.clone(),
+                    source: file.source.clone(),
+                    span: layout.span,
+                    recipe_name: recipe_name.clone(),
+                });
+            aggregate
+                .rendered
+                .extend(rendered_names.iter().map(|name| (*name).to_owned()));
+            aggregate.has_legacy_layout |= !uses_slot_api;
 
             for span in usage
                 .computed_slots
@@ -424,21 +451,6 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     });
                 }
             }
-            for (slot, _) in &recipe.slots {
-                if !rendered_names.contains(slot.as_str()) {
-                    diagnostics.push(ProjectDiagnostic {
-                        filename: file.filename.clone(),
-                        source: file.source.clone(),
-                        rule: "slot-unused",
-                        suggestion: None,
-                        diagnostic: Diagnostic::error(
-                            format!("declared slot `{slot}` is not rendered by `{recipe_name}`"),
-                            layout.span,
-                        ),
-                    });
-                }
-            }
-            let uses_slot_api = rendered.iter().any(|slot| slot.slot_api);
             if !uses_slot_api {
                 diagnostics.push(ProjectDiagnostic {
                     filename: file.filename.clone(),
@@ -464,6 +476,41 @@ pub fn lint_project(files: &[ProjectFile]) -> Vec<ProjectDiagnostic> {
                     diagnostic: Diagnostic::warning(
                         "manual class composition belongs in the recipe",
                         *span,
+                    ),
+                });
+            }
+        }
+    }
+
+    // A compound component deliberately splits one recipe across several
+    // Layout exports, and those exports may live in separate source files.
+    // Validate the recipe against their union. Requiring every leaf export to
+    // render every shared slot reports correct compounds as wholly invalid.
+    for (recipe_key, usage) in recipe_usage {
+        let Some(recipe) = recipes.get(&recipe_key) else {
+            continue;
+        };
+        // A legacy layout uses ordinary class composition rather than the
+        // slot API. Its warning is actionable, but absence from `slot.*` is
+        // not proof that the recipe slot is dead. Keep strict unused
+        // validation for recipes whose complete compound uses the typed slot
+        // contract.
+        if usage.has_legacy_layout {
+            continue;
+        }
+        for (slot, _) in &recipe.slots {
+            if !usage.rendered.contains(slot) {
+                diagnostics.push(ProjectDiagnostic {
+                    filename: usage.filename.clone(),
+                    source: usage.source.clone(),
+                    rule: "slot-unused",
+                    suggestion: None,
+                    diagnostic: Diagnostic::error(
+                        format!(
+                            "declared slot `{slot}` is not rendered by `{}`",
+                            usage.recipe_name
+                        ),
+                        usage.span,
                     ),
                 });
             }
@@ -850,6 +897,29 @@ export const Button: Layout<typeof button> = () => <button {...slot.root}><i {..
     }
 
     #[test]
+    fn compound_layouts_share_the_recipe_slot_contract() {
+        let diagnostics = lint(
+            RECIPE,
+            r#"import type { Layout } from "solid-layouts";
+import { button } from "./Button.recipe";
+export const Button: Layout<typeof button> = () => <button {...slot.root} />;
+export const ButtonIcon: Layout<typeof button> = () => <i {...slot.icon} />;
+"#,
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .all(|item| item.rule != "slot-unused"),
+            "{}",
+            diagnostics
+                .iter()
+                .map(|item| item.diagnostic.message.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    #[test]
     fn unresolved_recipes_and_slot_mismatches_are_errors() {
         let diagnostics = lint(
             RECIPE,
@@ -915,6 +985,7 @@ export const Button: Layout<typeof button> = () => <button class={twMerge("butto
                 .iter()
                 .any(|item| item.diagnostic.message.contains("legacy component-shaped"))
         );
+        assert!(diagnostics.iter().all(|item| item.rule != "slot-unused"));
         assert!(
             diagnostics
                 .iter()
