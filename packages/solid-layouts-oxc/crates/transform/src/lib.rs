@@ -22,8 +22,8 @@ use layouts_common::{
 };
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    BindingPattern, Declaration, Expression, Program, Statement, TSType, TSTypeName,
-    VariableDeclaration, VariableDeclarator,
+    BindingPattern, Declaration, Expression, Program, Statement, TSSignature, TSType,
+    TSTypeAliasDeclaration, TSTypeName, VariableDeclaration, VariableDeclarator,
 };
 use oxc_codegen::Codegen;
 use oxc_parser::Parser;
@@ -45,6 +45,8 @@ pub struct FoundLayout {
     pub parameters_span: Option<Span>,
     pub body_span: Option<Span>,
     pub props_span: Option<Span>,
+    /// Name of the props type, when it is a plain reference we can look up.
+    pub props_type: Option<String>,
     pub statement_span: Span,
     pub export_prefix_span: Option<Span>,
 }
@@ -330,10 +332,28 @@ fn compile_library_source(
             } else {
                 ""
             };
+            // What the component declares is its own API, and the runtime has
+            // to be told so it does not spread those props onto the root
+            // element on top of wherever the layout puts them.
+            let declared = layout
+                .props_type
+                .as_deref()
+                .map(|name| declared_prop_keys(program, name))
+                .unwrap_or_default();
+            let behaviour = if declared.is_empty() {
+                String::new()
+            } else {
+                let keys = declared
+                    .iter()
+                    .map(|key| format!("\"{key}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(", behaviour: [{keys}]")
+            };
             edits.push(SourceEdit::Insert {
                 at: layout.statement_span.end as usize,
                 text: format!(
-                    "\n{exported}const {} = __defineLayoutComponent({{ recipe: {}, layout: {raw}, embedded: true }}) as __LayoutComponent<{props}>;",
+                    "\n{exported}const {} = __defineLayoutComponent({{ recipe: {}, layout: {raw}, embedded: true{behaviour} }}) as __LayoutComponent<{props}>;",
                     layout.binding,
                     layout.recipe.as_deref().expect("validated Layout recipe"),
                 ),
@@ -453,6 +473,77 @@ fn variable_declaration<'a, 'b>(
     }
 }
 
+/// The type alias behind a statement, whether or not it is exported.
+fn type_alias_declaration<'a, 'b>(
+    statement: &'b Statement<'a>,
+) -> Option<&'b TSTypeAliasDeclaration<'a>> {
+    match statement {
+        Statement::TSTypeAliasDeclaration(declaration) => Some(declaration),
+        Statement::ExportDeclaration(export) => match &export.declaration {
+            Declaration::TSTypeAliasDeclaration(declaration) => Some(declaration),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The prop names a component declares as its own API.
+///
+/// A props type is an intersection, and the two halves mean different things.
+/// A referenced member -- `UIBaseProps`, `JSX.ButtonHTMLAttributes` -- is
+/// inherited HTML, and those props belong on the element. An inline object
+/// literal is what this component itself accepts, and the layout is what
+/// places them.
+///
+/// Only the literal's keys are the component's own, and the runtime needs to
+/// know them so it does not also spread them onto the root element. A
+/// component declaring `onInput?: (value: string) => void` and wiring it to an
+/// inner input had the caller's handler bound to the wrapper as well; the
+/// inner event bubbled up to it and called the handler a second time with the
+/// raw InputEvent, which is not what the signature promises. The same held for
+/// every `onChange`, `onSubmit` and `onInput` that a layout translates.
+fn declared_prop_keys(program: &Program<'_>, name: &str) -> Vec<String> {
+    for statement in &program.body {
+        let Some(alias) = type_alias_declaration(statement) else {
+            continue;
+        };
+        if alias.id.name.as_str() != name {
+            continue;
+        }
+        let mut keys = Vec::new();
+        collect_literal_keys(&alias.type_annotation, &mut keys);
+        return keys;
+    }
+    Vec::new()
+}
+
+/// Keys of every inline object literal in a props type, intersections included.
+fn collect_literal_keys(annotation: &TSType<'_>, keys: &mut Vec<String>) {
+    match annotation {
+        TSType::TSTypeLiteral(literal) => {
+            for member in &literal.members {
+                if let TSSignature::TSPropertySignature(property) = member
+                    && let Some(key) = property.key.static_name()
+                {
+                    let key = key.to_string();
+                    if !keys.contains(&key) {
+                        keys.push(key);
+                    }
+                }
+            }
+        }
+        TSType::TSIntersectionType(intersection) => {
+            for part in &intersection.types {
+                collect_literal_keys(part, keys);
+            }
+        }
+        TSType::TSParenthesizedType(parenthesized) => {
+            collect_literal_keys(&parenthesized.type_annotation, keys);
+        }
+        _ => {}
+    }
+}
+
 fn as_layout(
     declarator: &VariableDeclarator<'_>,
     statement_span: Span,
@@ -487,11 +578,15 @@ fn as_layout(
             },
             _ => None,
         });
-    let props_span = reference
+    let props = reference
         .type_arguments
         .as_ref()
-        .and_then(|arguments| arguments.params.get(1))
-        .map(GetSpan::span);
+        .and_then(|arguments| arguments.params.get(1));
+    let props_span = props.map(GetSpan::span);
+    let props_type = props.and_then(|argument| match argument {
+        TSType::TSTypeReference(reference) => type_name(&reference.type_name),
+        _ => None,
+    });
 
     let (parameters, parameters_span, body_span) = match declarator.init.as_ref() {
         Some(Expression::ArrowFunctionExpression(arrow)) => (
@@ -511,6 +606,7 @@ fn as_layout(
         parameters_span,
         body_span,
         props_span,
+        props_type,
         statement_span,
         export_prefix_span: exported
             .then(|| Span::new(statement_span.start, declaration_span.start)),
@@ -745,6 +841,85 @@ const Button: Layout<typeof button, ButtonProps> = () => {
         assert!(result.code.contains("{p.children}"), "{}", result.code);
         assert!(
             !result.code.contains("{ slot, children }"),
+            "{}",
+            result.code
+        );
+    }
+
+    #[test]
+    fn component_output_routes_the_props_a_component_declares_itself() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { passwordField } from "./PasswordField.recipe";
+export type PasswordFieldProps = UIBaseProps & {
+  value?: string;
+  onInput?: (value: string) => void;
+  onBlur?: () => void;
+};
+export const PasswordField: Layout<typeof passwordField, PasswordFieldProps> = () => {
+  return <input value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />;
+};
+"#;
+        let mut options = TransformOptions::new("PasswordField.layout.tsx", CompilerMode::Library);
+        options.library_output = LibraryOutput::Component;
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        // Declared props are the component's own API. Without this the runtime
+        // also spreads them onto the root, and an inner input's event bubbles
+        // back to the caller's handler with the raw event.
+        assert!(
+            result
+                .code
+                .contains("embedded: true, behaviour: [\"value\", \"onInput\", \"onBlur\"] })"),
+            "{}",
+            result.code
+        );
+    }
+
+    #[test]
+    fn component_output_leaves_inherited_html_props_as_passthrough() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import { button } from "./Button.recipe";
+export type ButtonProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type"> &
+  UIBaseProps & {
+    variant?: Variant;
+  };
+export const Button: Layout<typeof button, ButtonProps> = () => {
+  return <button>{props.children}</button>;
+};
+"#;
+        let mut options = TransformOptions::new("Button.layout.tsx", CompilerMode::Library);
+        options.library_output = LibraryOutput::Component;
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        // `onClick` and the rest of the HTML surface arrive through a referenced
+        // type, so they stay passthrough and still reach the element.
+        assert!(
+            result.code.contains("behaviour: [\"variant\"] })"),
+            "{}",
+            result.code
+        );
+        assert!(!result.code.contains("onClick"), "{}", result.code);
+    }
+
+    #[test]
+    fn component_output_omits_behaviour_when_the_props_type_is_not_local() {
+        let source = r#"import type { Layout } from "solid-layouts";
+import type { BadgeProps } from "./types";
+import { badge } from "./Badge.recipe";
+export const Badge: Layout<typeof badge, BadgeProps> = () => {
+  return <span>{props.children}</span>;
+};
+"#;
+        let mut options = TransformOptions::new("Badge.layout.tsx", CompilerMode::Library);
+        options.library_output = LibraryOutput::Component;
+        let result = transform(source, &options);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        // Nothing to read means nothing claimed: the previous behaviour, which
+        // is the safe direction to fail in.
+        assert!(
+            result
+                .code
+                .contains("embedded: true }) as __LayoutComponent<BadgeProps>;"),
             "{}",
             result.code
         );
