@@ -101,6 +101,32 @@ describe("defineComponent: the props split", () => {
     dispose();
   });
 
+  test("a declared prop stays off the root slot", () => {
+    // The bug this covers: a component declaring `onInput?: (value: string)
+    // => void` wires it to an inner input itself. If the same prop is also
+    // spread onto the root, the inner event bubbles back up to the wrapper
+    // and calls the caller's handler a second time with the raw InputEvent,
+    // which is not what the signature promises. Whichever fires last wins,
+    // and that is the bubbled one.
+    const { seen, layout } = capturing();
+
+    const Field = defineComponent({
+      recipe: button,
+      layout: layout as never,
+      behaviour: ["onInput"],
+      setup: () => ({ loading: () => false }),
+    });
+
+    const handler = () => {};
+    const dispose = mount(Field, { onInput: handler, onClick: handler });
+
+    expect(seen.slot?.root).not.toHaveProperty("onInput");
+    // The contrast that keeps this honest: an undeclared handler is plain
+    // HTML and still has to reach the element.
+    expect(seen.slot?.root?.onClick).toBe(handler);
+    dispose();
+  });
+
   test("undeclared props are HTML and reach the element", () => {
     // The bucket that did not exist: `id`, `onClick`, `aria-label` and
     // `data-testid` were swallowed as behaviour and never rendered.
