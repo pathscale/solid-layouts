@@ -123,7 +123,7 @@ describe("defineComponent: the props split", () => {
     expect(seen.slot?.root).not.toHaveProperty("onInput");
     // The contrast that keeps this honest: an undeclared handler is plain
     // HTML and still has to reach the element.
-    expect(seen.slot?.root?.onClick).toBe(handler);
+    expect(seen.slot?.root).toHaveProperty("onClick", handler);
     dispose();
   });
 
