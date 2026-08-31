@@ -84,7 +84,7 @@ jobs:
                 process.exit(1);
               }
               emit([{ ...match, version }], true);
-              return;
+              process.exit(0);
             }
 
             if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") {
@@ -94,7 +94,7 @@ jobs:
                 process.exit(1);
               }
               emit([{ ...match, version: versionOf(match) }], false);
-              return;
+              process.exit(0);
             }
 
             // npm is the source of truth rather than the diff, so a rerun or a
