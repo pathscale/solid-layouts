@@ -65,7 +65,24 @@ automation tokens from bypassing the OIDC-only release path.
 
 ## Normal releases
 
-Every release tag must exactly match the package version:
+**A version bump is the release.** Land a commit on `master` that changes a
+package's `version`, and that package publishes. A push that changes no version
+publishes nothing and skips its build entirely, so the number in `package.json`
+stays the thing a human decided rather than something a bot inferred from commit
+messages.
+
+npm is what the workflow checks, not the diff. It publishes when the version on
+`master` is not on the registry, which means a rerun, or a publish that failed
+after packing, is safe to repeat, and a merge that touched no version costs
+nothing.
+
+`@pathscale/test-ui` is excluded: it is a private fixture and ships only when a
+tag or a dispatch names it.
+
+### Releasing by tag
+
+Tags still work, for an explicit release or to repeat one. Every release tag must
+exactly match the package version:
 
 | Package | Workflow | Tag |
 | --- | --- | --- |

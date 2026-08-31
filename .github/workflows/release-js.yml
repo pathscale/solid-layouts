@@ -1,7 +1,12 @@
 name: Release Solid Layouts JavaScript packages
 
+# A version bump is the release. Landing a bump on master publishes that
+# package, and a push that changes no version does nothing, so the number in
+# package.json stays the thing a human decided rather than something a bot
+# inferred. Tags still work for an explicit or a repeat release.
 on:
   push:
+    branches: [master]
     tags:
       - "solid-layouts-v*"
       - "rsbuild-plugin-solid-layouts-v*"
@@ -21,8 +26,108 @@ permissions:
   contents: read
 
 jobs:
-  package:
+  decide:
+    name: decide
     runs-on: ubicloud-standard-2
+    outputs:
+      packages: ${{ steps.decide.outputs.packages }}
+      publish: ${{ steps.decide.outputs.publish }}
+      any: ${{ steps.decide.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Decide which packages this push releases
+        id: decide
+        env:
+          REQUESTED_PACKAGE: ${{ inputs.package }}
+        run: |
+          node --input-type=commonjs -e '
+            const { execFileSync } = require("node:child_process");
+            const { appendFileSync, readFileSync } = require("node:fs");
+
+            // `auto` marks the packages a version bump on master releases.
+            // pathscale-test-ui is a private fixture, so it ships only when a
+            // tag or a dispatch names it.
+            const known = [
+              { name: "solid-layouts", directory: "packages/solid-layouts", auto: true },
+              { name: "rsbuild-plugin-solid-layouts", directory: "packages/rsbuild-plugin-solid-layouts", auto: true },
+              { name: "pathscale-test-ui", directory: "Test-UI/bundle", auto: false },
+            ];
+            const versionOf = (p) =>
+              JSON.parse(readFileSync(`${p.directory}/package.json`, "utf8")).version;
+            const publishedNameOf = (p) =>
+              JSON.parse(readFileSync(`${p.directory}/package.json`, "utf8")).name;
+
+            const out = (key, value) => appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+            const emit = (selected, publish) => {
+              out("packages", JSON.stringify(selected));
+              out("publish", String(publish));
+              out("any", String(selected.length > 0));
+            };
+
+            const refType = process.env.GITHUB_REF_TYPE;
+            const refName = process.env.GITHUB_REF_NAME;
+
+            if (refType === "tag") {
+              const match = known.find((p) => refName.startsWith(`${p.name}-v`));
+              if (!match) {
+                console.log(`::error::no package matches tag ${refName}`);
+                process.exit(1);
+              }
+              const version = versionOf(match);
+              const expected = `${match.name}-v${version}`;
+              if (refName !== expected) {
+                console.log(`::error::expected tag ${expected}, received ${refName}`);
+                process.exit(1);
+              }
+              emit([{ ...match, version }], true);
+              return;
+            }
+
+            if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") {
+              const match = known.find((p) => p.name === process.env.REQUESTED_PACKAGE);
+              if (!match) {
+                console.log(`::error::unknown package ${process.env.REQUESTED_PACKAGE}`);
+                process.exit(1);
+              }
+              emit([{ ...match, version: versionOf(match) }], false);
+              return;
+            }
+
+            // npm is the source of truth rather than the diff, so a rerun or a
+            // publish that failed half way is safe to repeat, and a merge that
+            // touched no version costs nothing.
+            const selected = [];
+            for (const p of known.filter((p) => p.auto)) {
+              const version = versionOf(p);
+              const published = publishedNameOf(p);
+              let onNpm = true;
+              try {
+                execFileSync("npm", ["view", `${published}@${version}`, "version"], { stdio: "ignore" });
+              } catch {
+                onNpm = false;
+              }
+              if (onNpm) {
+                console.log(`::notice::${published} ${version} is already on npm`);
+              } else {
+                console.log(`::notice::releasing ${published} ${version}`);
+                selected.push({ ...p, version });
+              }
+            }
+            emit(selected, selected.length > 0);
+          '
+
+  package:
+    needs: decide
+    if: needs.decide.outputs.any == 'true'
+    runs-on: ubicloud-standard-2
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.decide.outputs.packages) }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -30,70 +135,38 @@ jobs:
         with:
           node-version: 22
 
-      - name: Select package
-        id: package
-        shell: bash
-        env:
-          REQUESTED_PACKAGE: ${{ inputs.package }}
-        run: |
-          selector="${REQUESTED_PACKAGE:-$GITHUB_REF_NAME}"
-          case "$selector" in
-            solid-layouts|solid-layouts-v*)
-              echo "directory=packages/solid-layouts" >> "$GITHUB_OUTPUT"
-              echo "tag-prefix=solid-layouts" >> "$GITHUB_OUTPUT"
-              ;;
-            rsbuild-plugin-solid-layouts|rsbuild-plugin-solid-layouts-v*)
-              echo "directory=packages/rsbuild-plugin-solid-layouts" >> "$GITHUB_OUTPUT"
-              echo "tag-prefix=rsbuild-plugin-solid-layouts" >> "$GITHUB_OUTPUT"
-              ;;
-            pathscale-test-ui|pathscale-test-ui-v*)
-              echo "directory=Test-UI/bundle" >> "$GITHUB_OUTPUT"
-              echo "tag-prefix=pathscale-test-ui" >> "$GITHUB_OUTPUT"
-              ;;
-            *) exit 1 ;;
-          esac
-
-      - name: Match release tag to package version
-        if: github.event_name == 'push'
-        working-directory: ${{ steps.package.outputs.directory }}
-        env:
-          TAG_PREFIX: ${{ steps.package.outputs.tag-prefix }}
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          expected="$TAG_PREFIX-v$version"
-          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
-            echo "expected tag $expected, received $GITHUB_REF_NAME"
-            exit 1
-          fi
-
       - name: Install runtime build dependencies
-        if: steps.package.outputs.directory == 'packages/solid-layouts'
+        if: matrix.package.directory == 'packages/solid-layouts'
         working-directory: packages/solid-layouts
         run: bun install --frozen-lockfile
 
       - name: Pack
-        working-directory: ${{ steps.package.outputs.directory }}
+        working-directory: ${{ matrix.package.directory }}
         run: |
           mkdir -p "$RUNNER_TEMP/npm-package"
           npm pack --pack-destination "$RUNNER_TEMP/npm-package"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: npm-package
+          name: npm-package-${{ matrix.package.name }}
           path: ${{ runner.temp }}/npm-package/*.tgz
           if-no-files-found: error
 
   publish:
-    needs: package
-    if: github.event_name == 'push'
+    needs: [decide, package]
+    if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.decide.outputs.packages) }}
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: npm-package
+          name: npm-package-${{ matrix.package.name }}
           path: npm-package
 
       - uses: actions/setup-node@v4

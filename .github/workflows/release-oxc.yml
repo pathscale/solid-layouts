@@ -4,8 +4,14 @@ name: Release solid-layouts-oxc
 # carry a binary per platform, and a macOS laptop can build exactly one of
 # them. Publishing from here rather than locally is what stops a version being
 # burned on an artifact that fails on first install under Linux.
+#
+# A version bump is the release. Landing a bump on master publishes it, and a
+# push that does not change the version does nothing, so the number in
+# package.json stays the thing a human decided rather than something a bot
+# inferred. Tags still work for an explicit or a repeat release.
 on:
   push:
+    branches: [master]
     tags:
       - "solid-layouts-oxc-v*"
   workflow_dispatch:
@@ -14,8 +20,65 @@ permissions:
   contents: read
 
 jobs:
+  decide:
+    name: decide
+    runs-on: ubicloud-standard-2
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Decide whether this push is a release
+        id: decide
+        working-directory: packages/solid-layouts-oxc
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # A tag names the version it releases, and disagreeing with
+          # package.json is a mistake worth failing on rather than guessing at.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            expected="solid-layouts-oxc-v$version"
+            if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+              echo "expected tag $expected, received $GITHUB_REF_NAME"
+              exit 1
+            fi
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Dispatch is the bootstrap path: build the artifact, publish nothing.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::building $version without publishing"
+            exit 0
+          fi
+
+          # npm is the source of truth rather than the diff, so a rerun or a
+          # publish that failed half way is safe to repeat and a merge that
+          # touched no version costs nothing.
+          if npm view "solid-layouts-oxc@$version" version >/dev/null 2>&1; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::solid-layouts-oxc $version is already on npm"
+            exit 0
+          fi
+
+          echo "build=true" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::releasing solid-layouts-oxc $version"
+
   build:
     name: ${{ matrix.target }}
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -79,7 +142,7 @@ jobs:
           path: packages/solid-layouts-oxc/*.node
 
   package:
-    needs: build
+    needs: [decide, build]
     runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
@@ -102,17 +165,6 @@ jobs:
             exit 1
           fi
 
-      - name: Match release tag to package version
-        if: github.event_name == 'push'
-        working-directory: packages/solid-layouts-oxc
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          expected="solid-layouts-oxc-v$version"
-          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
-            echo "expected tag $expected, received $GITHUB_REF_NAME"
-            exit 1
-          fi
-
       - name: Pack
         working-directory: packages/solid-layouts-oxc
         run: |
@@ -126,8 +178,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: package
-    if: github.event_name == 'push'
+    needs: [decide, package]
+    if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
