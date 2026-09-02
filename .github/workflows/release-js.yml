@@ -155,7 +155,17 @@ jobs:
   publish:
     needs: [decide, package]
     if: needs.decide.outputs.publish == 'true'
-    runs-on: ubicloud-standard-2
+    # The one job in this repository that may not run on Ubicloud. npm signs a
+    # provenance statement on publish and the registry rejects the result from
+    # anything it reads as self-hosted, which is what an Ubicloud runner is:
+    #
+    #   npm error 422 Error verifying sigstore provenance bundle: Unsupported
+    #   GitHub Actions runner environment: "self-hosted". Only "github-hosted"
+    #   runners are supported when publishing with provenance.
+    #
+    # It fails at the registry rather than at the runner, so the release gets
+    # all the way to a packed tarball before it dies. Leave this alone.
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
