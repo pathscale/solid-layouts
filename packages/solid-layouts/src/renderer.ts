@@ -19,7 +19,38 @@
 export type { JSX } from "solid-js";
 export { Dynamic, createComponent } from "solid-js/web";
 
-import { splitProps } from "solid-js";
+import {
+  type Owner,
+  createRoot,
+  getOwner,
+  onCleanup,
+  runWithOwner,
+  splitProps,
+} from "solid-js";
+
+/**
+ * Resolve a component's children under an owner that inherits the caller's
+ * context but not its lifetime.
+ *
+ * Both halves are load-bearing, and they pull apart. Context has to come from
+ * the *read site*, because that is where a provider the layout wrapped these
+ * children in has been established. Lifetime has to come from the *component*,
+ * because the read site is the consumer's `insert`, a computation that
+ * re-runs — and it subscribes to the very memo it would then own, so the first
+ * time a child changed it disposed the children it was re-reading. That is the
+ * "children update once, then freeze" bug, and under Solid 2 it took the whole
+ * application's reactivity with it.
+ *
+ * 1.9 separates the two with `createRoot`'s second argument, which sets the
+ * new root's owner without handing the root to it. Disposal is then ours to
+ * place, so it rides on the component. See the 2.0 twin for how that major
+ * spells the same thing.
+ */
+export const ownChildren = <T>(owner: Owner | null, build: () => T): T =>
+  createRoot((dispose) => {
+    if (owner) runWithOwner(owner, () => onCleanup(dispose));
+    return build();
+  }, getOwner() ?? undefined);
 
 /**
  * `props` without `keys`, still tracked.

@@ -373,6 +373,59 @@ describe("defineComponent: children", () => {
     expect(seen.children).toBe("press me");
     dispose();
   });
+
+  test("a reactive child keeps updating after the reading effect re-runs", () => {
+    // The children memo is built on first read rather than at set-up, so a
+    // layout's provider wraps it. But a memo created while an effect is
+    // running belongs to that effect, and an effect disposes what it owns
+    // before it re-runs. The consumer's `insert` is such an effect, so the
+    // first time it re-ran it disposed the resolved children and every
+    // reactive child under the Layout went dead — silently, with nothing
+    // thrown and the last-rendered DOM left in place.
+    //
+    // Under Solid 2 the blast radius is the whole application, because the
+    // components nest: one `<Show>` mounting in the same batch as an
+    // unrelated write froze every subsequent update on the page.
+    const [gate, setGate] = createSignal(0);
+    const [label, setLabel] = createSignal("first");
+    const rendered: string[] = [];
+
+    const Root = defineComponent({
+      recipe: button,
+      layout: ((stable: { children: JSX.Element }) => {
+        // Stands in for the consumer's `insert`: an effect that reads the
+        // children and re-runs when something else it tracks changes.
+        createRenderEffect(() => {
+          gate();
+          void stable.children;
+        });
+        return null;
+      }) as never,
+    });
+
+    const dispose = mount(Root, {
+      // An accessor, which is what a reactive child compiles to. `children()`
+      // calls it inside the memo, so it recomputes with the signal.
+      get children() {
+        return () => {
+          rendered.push(label());
+          return label();
+        };
+      },
+    });
+
+    expect(rendered).toEqual(["first"]);
+
+    setLabel("second");
+    expect(rendered).toEqual(["first", "second"]);
+
+    // Re-run the reading effect. This is the disposal the bug depended on.
+    setGate(1);
+
+    setLabel("third");
+    expect(rendered.at(-1)).toBe("third");
+    dispose();
+  });
 });
 
 describe("defineComponent: identity", () => {

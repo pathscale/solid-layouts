@@ -3,13 +3,20 @@ import {
   children as resolveChildren,
   createContext,
   createMemo,
+  getOwner,
   useContext,
 } from "solid-js";
 import type { ComponentDefaults, UIConfig } from "./defaults.js";
 import { globalDefaultsFor } from "./defaults.js";
 import { __nextInstance, __slotId } from "./ids.js";
 import type { Recipe } from "./recipe.js";
-import { Dynamic, type JSX, createComponent, rest } from "./renderer.js";
+import {
+  Dynamic,
+  type JSX,
+  createComponent,
+  ownChildren,
+  rest,
+} from "./renderer.js";
 import type { PropsOf, SlotAttrs, SlotsOf, StateOf } from "./types.js";
 
 /**
@@ -347,12 +354,31 @@ export function defineComponent<
     // it — which is what `<Alert>` hit, its indicator throwing "must be used
     // within <Alert>" while sitting inside one. Deferring lets the read happen
     // under the provider.
+    //
+    // Deferring alone is not enough, though, and `ownChildren` is the rest of
+    // it. A memo built while an effect is running belongs to that effect, and
+    // an effect disposes what it owns before it re-runs. The first read here
+    // comes from the consumer's `insert`, which then subscribes to the very
+    // memo it now owns — so the first time a child changed, the effect woke
+    // and disposed the children it was re-reading. Everything reactive under
+    // the component went dead, with nothing thrown and the last-rendered DOM
+    // left in place. Under Solid 2, where these components nest to the root,
+    // one `<Show>` mounting was enough to freeze an entire application.
+    //
+    // So the children need the read site's *context*, which is where a
+    // provider the layout wrapped them in lives, and the component's
+    // *lifetime*. Splitting those is the one thing each major spells
+    // differently, which is why it sits in the renderer beside the other.
+    const owner = getOwner();
     let kids: (() => JSX.Element) | undefined;
 
     const stable = {
       slot,
       get children() {
-        if (!kids) kids = resolveChildren(() => escape.children as JSX.Element);
+        if (!kids)
+          kids = ownChildren(owner, () =>
+            resolveChildren(() => escape.children as JSX.Element),
+          );
         return kids();
       },
     } as LayoutStable<R>;
