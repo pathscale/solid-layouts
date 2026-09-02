@@ -180,7 +180,10 @@ jobs:
   publish:
     needs: [decide, package]
     if: needs.decide.outputs.publish == 'true'
-    runs-on: ubicloud-standard-2
+    # GitHub-hosted for the same reason as `release-js`: npm rejects a
+    # provenance statement signed on a runner it reads as self-hosted, which
+    # an Ubicloud runner is. See that file for the registry's error.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
