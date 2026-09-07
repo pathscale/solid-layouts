@@ -14,6 +14,26 @@ export type Variant = Record<string, VariantClasses>;
 export type SlotDefinition = {
   /** Always present on this slot. Conventionally its BEM element. */
   base?: string;
+  /**
+   * The `data-slot` this slot publishes, when it is not `${component}-${name}`.
+   *
+   * The default qualifies every non-root slot with its component, so a
+   * selector can reach `accordion-trigger` without also matching a tab's. That
+   * is right for a part only its own component has.
+   *
+   * Some parts are not like that. A label, a description, an icon mean the
+   * same thing in every control that has one, and a design system styles them
+   * once -- `.field [data-slot="description"]` has to match whichever control
+   * is inside the field. Qualifying those names would force the stylesheet to
+   * enumerate the components instead, and it would have to be edited again for
+   * the next one.
+   *
+   * So: name the shared part here, and leave it off for everything else. Two
+   * components publishing the same name is the point when the name is shared,
+   * and a bug otherwise, which is why this is opt-in and written down at the
+   * slot rather than inferred from the name.
+   */
+  slot?: string;
 };
 
 export type RecipeConfig = {

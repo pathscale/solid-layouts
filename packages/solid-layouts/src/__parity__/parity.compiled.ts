@@ -3,7 +3,7 @@ import { recipe } from "../recipe";
 /**
  * One recipe exercising every shape the compiler has to handle: a bare-string
  * variant, a slot-keyed one, several slots, both a prop and a state axis, and
- * a slot with no base class.
+ * a slot with no base class, and a slot publishing a shared name.
  */
 export const parityCompiled = recipe({
   component: "parity",
@@ -12,6 +12,7 @@ export const parityCompiled = recipe({
     root: { base: "p" },
     icon: { base: "p__icon" },
     bare: {},
+    shared: { base: "p__shared", slot: "description" },
   },
   props: {
     tone: { neutral: "p--neutral", loud: "p--loud" },
@@ -21,4 +22,4 @@ export const parityCompiled = recipe({
     open: { true: { root: "p--open", icon: "p__icon--open" } },
     busy: { true: "p--busy" },
   },
-_layouts:{slots:{"root":{base:"p",axes:{"tone":{"neutral":"p--neutral","loud":"p--loud"},"flush":{"true":"p--flush"},"open":{"true":"p--open"},"busy":{"true":"p--busy"}}},"icon":{base:"p__icon",axes:{"open":{"true":"p__icon--open"}}},"bare":{base:"",axes:{}}},stateKeys:["open","busy"],slotIds:{"root":2,"icon":1,"bare":0}}});
+_layouts:{slots:{"root":{base:"p",axes:{"tone":{"neutral":"p--neutral","loud":"p--loud"},"flush":{"true":"p--flush"},"open":{"true":"p--open"},"busy":{"true":"p--busy"}}},"icon":{base:"p__icon",axes:{"open":{"true":"p__icon--open"}}},"bare":{base:"",axes:{}},"shared":{base:"p__shared",axes:{}}},stateKeys:["open","busy"],slotIds:{"root":2,"icon":1,"bare":0,"shared":3}}});
