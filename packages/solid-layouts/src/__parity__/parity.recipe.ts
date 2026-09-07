@@ -3,7 +3,7 @@ import { recipe } from "../recipe";
 /**
  * One recipe exercising every shape the compiler has to handle: a bare-string
  * variant, a slot-keyed one, several slots, both a prop and a state axis, and
- * a slot with no base class.
+ * a slot with no base class, and a slot publishing a shared name.
  */
 export const parity = recipe({
   component: "parity",
@@ -12,6 +12,7 @@ export const parity = recipe({
     root: { base: "p" },
     icon: { base: "p__icon" },
     bare: {},
+    shared: { base: "p__shared", slot: "description" },
   },
   props: {
     tone: { neutral: "p--neutral", loud: "p--loud" },

@@ -89,6 +89,31 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
     );
   }
 
+  const rootOverride = config.slots.root?.slot;
+  if (rootOverride !== undefined) {
+    // Same reason `extend` demands its own `component`: the root's `data-slot`
+    // is the component's identity, and two recipes answering to one name are
+    // indistinguishable to a selector. Shared names are for parts, not wholes.
+    throw new Error(
+      `${config.component}: the root slot cannot publish a \`slot\` name of ` +
+        `its own ("${rootOverride}"). The root carries the component's ` +
+        `identity, which is \`component\`.`,
+    );
+  }
+
+  /**
+   * The `data-slot` a slot publishes.
+   *
+   * One function for both resolution paths below, so the compiled table and
+   * the interpreted walk cannot answer this differently -- the override lives
+   * in `config`, which both of them close over, so nothing had to be added to
+   * what the compiler emits.
+   */
+  function publishedName(slot: string): string {
+    if (slot === "root") return config.component;
+    return config.slots[slot]?.slot ?? `${config.component}-${slot}`;
+  }
+
   const compiled = config._layouts;
 
   /**
@@ -126,8 +151,7 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
         }
       }
 
-      attrs["data-slot"] =
-        slot === "root" ? config.component : `${config.component}-${slot}`;
+      attrs["data-slot"] = publishedName(slot);
 
       if (slot === "root" && overrides) {
         attrs.class = cx(attrs.class, overrides);
@@ -184,10 +208,9 @@ export function recipe<const C extends RecipeConfig>(config: C): Recipe<C> {
       }
 
       // Root carries the component's identity; other slots qualify it, so a
-      // selector can find `accordion-trigger` or its `-indicator` specifically.
-      attrs["data-slot"] = isRoot
-        ? config.component
-        : `${config.component}-${slot}`;
+      // selector can find `accordion-trigger` or its `-indicator` specifically,
+      // unless the slot names a part the whole library shares.
+      attrs["data-slot"] = publishedName(slot);
 
       if (isRoot && overrides) {
         attrs.class = cx(attrs.class, overrides);

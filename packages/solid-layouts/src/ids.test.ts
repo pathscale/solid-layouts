@@ -13,8 +13,12 @@ describe("slot ids", () => {
     const compiled = (parityCompiled.config as RecipeConfig)
       ._layouts as CompiledRecipe;
     const indices = Object.values(compiled.slotIds);
-    expect(indices.length).toBe(3);
-    expect(new Set(indices).size).toBe(3);
+    // Counted from the fixture rather than written out, so adding a slot to
+    // the parity recipe does not fail here for a reason that has nothing to do
+    // with ids. What is asserted is one index per slot, all of them distinct.
+    const slotCount = Object.keys(parityCompiled.config.slots).length;
+    expect(indices.length).toBe(slotCount);
+    expect(new Set(indices).size).toBe(slotCount);
   });
 
   test("an id is the slot index and the instance", () => {

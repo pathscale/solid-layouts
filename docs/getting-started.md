@@ -89,6 +89,28 @@ Flex spacing follows the same rule. Application code uses named Layout parameter
 
 The recipe in A owns the concrete utility classes and spacing values. Strings such as `px-3.5`, `py-3`, and `gap-4` must not be repeated in D.
 
+#### Sharing a slot name across components
+
+A non-root slot publishes `data-slot="${component}-${slot}"`, so a stylesheet can reach `accordion-trigger` without also matching a tab's trigger. That is right for a part only one component has.
+
+Some parts are not like that. A label, a description and an icon mean the same thing in every control that has one, and a design system wants to style them once:
+
+```css
+.field [data-slot="description"] { color: var(--color-muted); }
+```
+
+That rule has to match whichever control is inside the field. Naming the slot explicitly opts out of the qualification:
+
+```ts
+slots: {
+  root: { base: "switch" },
+  description: { base: "switch__description", slot: "description" },
+}
+```
+
+The slot still owns its own class from the recipe; only the published name is shared. It is opt-in and written at the slot, because two components answering to one name is the point when the name is shared and a bug otherwise. The root slot cannot be renamed this way — its `data-slot` is the component's identity, and the recipe throws if you try.
+
+
 ### JSX names are case-sensitive
 
 Solid TSX and the application compiler distinguish intrinsic elements from component bindings by case:

@@ -84,6 +84,36 @@ describe("recipe", () => {
     expect(resolved.indicator!.class).not.toContain("my-app-thing");
   });
 
+  test("a slot can publish a shared name instead of a qualified one", () => {
+    const field = recipe({
+      component: "switch",
+      slots: {
+        root: { base: "switch" },
+        description: { base: "switch__description", slot: "description" },
+        thumb: { base: "switch__thumb" },
+      },
+    });
+
+    const resolved = field.resolve({});
+    // The shared part answers to the name every control's description uses,
+    // so one stylesheet rule reaches all of them.
+    expect(resolved.description!["data-slot"]).toBe("description");
+    // Its own class still comes from this recipe.
+    expect(resolved.description!.class).toBe("switch__description");
+    // Everything else is untouched.
+    expect(resolved.thumb!["data-slot"]).toBe("switch-thumb");
+    expect(resolved.root["data-slot"]).toBe("switch");
+  });
+
+  test("the root may not rename itself", () => {
+    expect(() =>
+      recipe({
+        component: "switch",
+        slots: { root: { base: "switch", slot: "control" } },
+      }),
+    ).toThrow(/root slot cannot publish/);
+  });
+
   test("a non-root slot qualifies the component name", () => {
     const indicatorSlot = accordionTrigger.resolve({}).indicator;
     expect(indicatorSlot!["data-slot"]).toBe("accordion-trigger-indicator");
