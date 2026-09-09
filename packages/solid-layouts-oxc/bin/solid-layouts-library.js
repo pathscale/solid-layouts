@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 "use strict";
 
-const { mkdirSync } = require("node:fs");
+const { mkdirSync, writeFileSync } = require("node:fs");
 const { resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { compileLibrary, lintLibrary } = require("../library.js");
+const { compileLintArtifact } = require("../lint-artifact.js");
 
 const args = process.argv.slice(2);
 const valueAfter = (name) => {
@@ -23,6 +24,14 @@ const options = {
 };
 if (args.includes("--lint")) {
   const lint = lintLibrary(options);
+  const artifactPath = valueAfter("--artifact");
+  if (artifactPath) {
+    const compiled = compileLintArtifact(lint);
+    const output = resolve(artifactPath);
+    mkdirSync(require("node:path").dirname(output), { recursive: true });
+    writeFileSync(output, compiled.bytes);
+    console.log(JSON.stringify(compiled.report));
+  }
   for (const item of lint.diagnostics) {
     if (item.baseline) continue;
     console.error(`${item.filename}:${item.line}:${item.column}: ${item.severity}: ${item.message}`);
