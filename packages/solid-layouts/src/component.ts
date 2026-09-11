@@ -337,6 +337,7 @@ export function defineComponent<
           name === rootSlot
             ? ({
                 ...asAttributes(passthrough as Record<string, unknown>),
+                style: escape.style,
                 ...(resolved()[name] as SlotAttrs),
               } as SlotAttrs)
             : (resolved()[name] as SlotAttrs),
@@ -445,7 +446,7 @@ export function defineComponent<
           // `id` or `aria-label`, but must not be able to overwrite the class
           // or the `data-slot` that identifies the component.
           ...asAttributes(passthrough as Record<string, unknown>),
-          ...spreadable(() => resolved()[rootSlot] as SlotAttrs),
+          ...spreadable(() => slot[rootSlot] as SlotAttrs),
         });
 
     // Nothing to provide means no wrapper, and under 2.0 that is a correctness
