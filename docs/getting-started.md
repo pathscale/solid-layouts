@@ -418,3 +418,5 @@ The safe migration order is:
 10. Measure bundle and per-instance cost only after correctness is established.
 
 The key boundary is always the same: application D consumes C. It never consumes raw A.
+
+A caller’s `style` is forwarded reactively to the root element, including components with a compiled layout. Inner slots do not inherit that style. A layout can explicitly override or merge `local.style` when it owns additional geometry.
