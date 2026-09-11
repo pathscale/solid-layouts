@@ -675,11 +675,11 @@ test("root style is reactive and does not leak into inner slots", () => {
   const [position, setPosition] = createSignal<{ left?: string; width: string }>({ left: "40px", width: "240px" });
   const Control = defineComponent({ recipe: button, layout: layout as never });
   const dispose = mount(Control, { get style() { return position(); } });
-  expect(seen.slot?.root.style).toEqual({ left: "40px", width: "240px" });
-  expect(seen.slot?.icon.style).toBeUndefined();
+  expect(seen.slot?.root?.style as unknown).toEqual({ left: "40px", width: "240px" });
+  expect(seen.slot?.icon?.style).toBeUndefined();
   setPosition({ left: "180px", width: "240px" });
-  expect(seen.slot?.root.style).toEqual({ left: "180px", width: "240px" });
+  expect(seen.slot?.root?.style as unknown).toEqual({ left: "180px", width: "240px" });
   setPosition({ width: "300px" });
-  expect(seen.slot?.root.style).toEqual({ width: "300px" });
+  expect(seen.slot?.root?.style as unknown).toEqual({ width: "300px" });
   dispose();
 });
