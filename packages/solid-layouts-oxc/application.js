@@ -196,6 +196,10 @@ function validateComponent(module, packageRoot, name, component, solid) {
       throw new Error(`${module}: component ${name} is missing manifest field ${key}`);
     }
   }
+  const behaviour = component.behaviour === undefined ? [] : component.behaviour;
+  if (!Array.isArray(behaviour) || behaviour.some((key) => typeof key !== "string")) {
+    throw new Error(`${module}: component ${name} manifest behaviour must be an array of strings`);
+  }
 
   const entry = requiredFile(packageRoot, component.entry, `${module}: ${name} entry`);
   const recipe = requiredFile(packageRoot, component.recipe, `${module}: ${name} recipe`);
@@ -235,7 +239,8 @@ function validateComponent(module, packageRoot, name, component, solid) {
   if (!new RegExp(`\\bexport\\s+const\\s+${component.layoutExport}\\b`).test(layoutSource)) {
     throw new Error(`${module}: ${name} Layout export ${component.layoutExport} was not found`);
   }
-  const callSite = `export const ${name} = __defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} })`;
+  const behaviourOption = behaviour.length ? `, behaviour: ${JSON.stringify(behaviour)}` : "";
+  const callSite = `export const ${name} = __defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport}${behaviourOption} })`;
   if (!entrySource.includes(callSite)) {
     throw new Error(`${module}: ${name} entry call site disagrees with its Layout manifest record`);
   }

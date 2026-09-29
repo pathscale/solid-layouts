@@ -267,6 +267,34 @@ test("rejects a generated entry that disagrees with its component record", () =>
   );
 });
 
+test("compiles an application against a library component with declared behaviour", () => {
+  const { root, packageRoot } = fixture();
+  const copy = makePackageEditable(root, packageRoot);
+  const manifestPath = join(copy, "layouts.manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.components.Button.behaviour = ["isDisabled"];
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  const entryPath = join(copy, "index.ts");
+  const entry = readFileSync(entryPath, "utf8").replace(
+    "layout: ButtonLayout })",
+    'layout: ButtonLayout, behaviour: ["isDisabled"] })',
+  );
+  writeFileSync(entryPath, entry);
+
+  const application = compileApplication({ root, layouts: ["@pathscale/test-ui"] });
+  const result = compileApplicationFile(
+    'import { Button } from "@pathscale/test-ui"; export const View = () => <Button isDisabled />;',
+    join(root, "src/View.tsx"),
+    application,
+  );
+
+  expect(application.sources[0].manifest.components.Button.behaviour).toEqual(["isDisabled"]);
+  expect(result.failed).toBe(false);
+  expect(result.changed).toBe(true);
+  expect(result.code).toContain(application.layoutSources[0].resolved);
+});
+
 /*
  * The boundary check has to follow the major being compiled.
  *

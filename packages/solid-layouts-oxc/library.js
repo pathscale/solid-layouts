@@ -164,6 +164,20 @@ function compileFile(source, filename, libraryOutput = "layout", solid = 1) {
   return result.code;
 }
 
+/**
+ * The props a layout declares for itself, read the way the application compiler
+ * reads them: compile the authored layout as a component and take the
+ * `behaviour` list it emits. Without this list a library entry routes none of
+ * its own props, so `p.href` read `undefined` and, written after
+ * `{...slot.root}`, overwrote the `href` passthrough had just put there.
+ */
+function declaredBehaviour(filename, solid) {
+  if (!existsSync(filename)) return [];
+  const code = compileFile(readFileSync(filename, "utf8"), filename, "component", solid);
+  const match = code.match(/behaviour: (\[[^\]]*\])/);
+  return match ? JSON.parse(match[1]) : [];
+}
+
 function lintLibrary(options = {}) {
   const root = resolve(options.root || process.cwd());
   const { configPath, config } = readLibraryConfig(root, options);
@@ -316,7 +330,7 @@ function modulePath(fromFile, toFile) {
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
-function generateEntries(components, outputRoot, solid) {
+function generateEntries(components, outputRoot, solid, sourceRoot) {
   const entries = new Map();
   for (const component of components) {
     const entry = resolve(outputRoot, component.entry);
@@ -329,9 +343,11 @@ function generateEntries(components, outputRoot, solid) {
       `import { defineComponent as __defineLayoutComponent } from "${boundaryFor(solid).specifier}";`,
       'import type { Component as __LayoutComponent } from "solid-js";',
     ];
+    const behaviour = sourceRoot ? declaredBehaviour(resolve(sourceRoot, component.layout), solid) : [];
+    const behaviourOption = behaviour.length ? `, behaviour: ${JSON.stringify(behaviour)}` : "";
     const componentExpression = component.propsType
-      ? `__defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} }) as __LayoutComponent<__${component.name}Props>`
-      : `__defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport} })`;
+      ? `__defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport}${behaviourOption} }) as __LayoutComponent<__${component.name}Props>`
+      : `__defineLayoutComponent({ recipe: ${component.recipeExport}, layout: ${component.layoutExport}${behaviourOption} })`;
     lines.push(
       `import { ${component.layoutExport} } from ${JSON.stringify(modulePath(entry, generatedLayout))};`,
       `import { ${component.recipeExport} } from ${JSON.stringify(modulePath(entry, recipe))};`,
@@ -460,6 +476,7 @@ function assertComponent(component, sourceRoot, outputRoot, solid) {
     recipeExport: component.recipeExport,
     layout: `./${generatedRelative}`,
     layoutExport: component.layoutExport,
+    behaviour: declaredBehaviour(sourceLayout, solid),
   };
 }
 
@@ -503,7 +520,7 @@ function compileLibrary(options = {}) {
   }
 
   const configuredComponents = config.components || discoverComponents(sourceRoot);
-  generateEntries(configuredComponents, outputRoot, solid);
+  generateEntries(configuredComponents, outputRoot, solid, sourceRoot);
 
   const components = {};
   for (const component of configuredComponents) {

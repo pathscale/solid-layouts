@@ -124,7 +124,7 @@ const Icon: Layout<typeof icon, IconProps> = ({ slot, children }, p) => {
 
 The compiled recipe contains `_layouts`, and B generates `index.ts` with the `defineComponent` Layout call site. The call site imports through `solid-layouts/application-boundary`, which E must resolve. This is deliberate: C is not flattened executable JavaScript, and it cannot silently bypass E. It is the valid, inspectable Layout UI input carried into the second compiler stage.
 
-`layouts.manifest.json` tells E which public component maps to which entry, recipe, and compiled Layout:
+`layouts.manifest.json` tells E which public component maps to which entry, recipe, and compiled Layout. Each generated component's `behaviour` array records the props its layout declares. B writes the same list into the component call site so the runtime routes those props to the layout. E checks the call site against the manifest before rewriting application imports. A v2 manifest emitted before this field existed remains valid; a missing `behaviour` field means an empty list:
 
 ```json
 {
@@ -137,7 +137,8 @@ The compiled recipe contains `_layouts`, and B generates `index.ts` with the `de
       "recipe": "./components/icon/Icon.recipe.ts",
       "recipeExport": "icon",
       "layout": "./components/icon/Icon.generated.tsx",
-      "layoutExport": "IconLayout"
+      "layoutExport": "IconLayout",
+      "behaviour": ["width", "height", "color", "name"]
     }
   }
 }
@@ -165,7 +166,7 @@ From `Test-UI`:
 bun run build:layouts
 ```
 
-That regenerates `bundle` and packs it into `artifacts`.
+That regenerates C and packs it into `artifacts`.
 
 ## Verification performed
 
@@ -177,9 +178,3 @@ That regenerates `bundle` and packs it into `artifacts`.
 - The generated Test-UI package was packed successfully and its tarball contents were inspected.
 - Chuzz imports Icon and Button from C and sends both through E; Button replaces the real title-bar and inspector controls rather than only changing an import.
 - Chuzz fails when an absent C export is imported and when E is removed.
-
-## Application-stage boundary
-
-The second compiler E reads `solidLayouts` from C's package metadata, loads `layouts.manifest.json`, follows D's imports, and matches application component references against the exact component records in C. An import with no manifest entry is a hard error. That work belongs to the application compiler and is not put back into UI or mixed into this first-pass package build.
-
-The explicit public entry points, mode boundary, manifest resolution contract, hard failures, and first Chuzz integration are specified in [Compiler modes and the Chuzz application integration](./compiler-modes-and-chuzz-application-plan.md).

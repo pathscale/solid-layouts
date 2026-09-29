@@ -34,6 +34,7 @@ export type LayoutManifest = {
     recipeExport?: string;
     layout?: string;
     layoutExport?: string;
+    behaviour?: string[];
   }>;
 };
 

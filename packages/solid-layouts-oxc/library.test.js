@@ -65,6 +65,11 @@ test("builds valid generated Layout source and a package manifest", () => {
   expect(entry).toContain("export const Button = __defineLayoutComponent");
   expect(packageJson.private).toBe(true);
   expect(entry).toContain("as __LayoutComponent<__ButtonProps>");
+  // A library entry routes the props its layout declares, as the application
+  // compiler does; without the list, `p.<prop>` read undefined in the layout.
+  expect(entry).toMatch(
+    /export const Button = __defineLayoutComponent\(\{ recipe: button, layout: ButtonLayout, behaviour: \[[^\]]*"isDisabled"/,
+  );
   expect(entry).toContain("export type { ButtonProps, ButtonVariant, ButtonSize }");
   expect(button).toContain("Boolean(p.isDisabled)");
   expect(button).toContain("p.squareSize / 2");
@@ -76,6 +81,7 @@ test("builds valid generated Layout source and a package manifest", () => {
   expect(result.manifest.components.Button.layout).toBe(
     "./components/button/Button.generated.tsx",
   );
+  expect(result.manifest.components.Button.behaviour).toContain("isDisabled");
 });
 
 test("the solid major picks which runtime entry the generated entry imports", () => {
