@@ -127,6 +127,34 @@ describe("defineComponent: the props split", () => {
     dispose();
   });
 
+  test("a declared prop reaches the layout when no setup takes it", () => {
+    // A library component with no setup, like a NavLink declaring `href`:
+    // before this, `p.href` read undefined, so a layout writing
+    // `href={p.href}` after `{...slot.root}` erased the real href.
+    const { seen, layout } = capturing();
+    const Link = defineComponent({
+      recipe: button,
+      layout: layout as never,
+      behaviour: ["href"],
+    });
+    const dispose = mount(Link, { href: "/apps" });
+    expect(seen.p?.href).toBe("/apps");
+    dispose();
+  });
+
+  test("a setup result still wins over the declared prop of the same name", () => {
+    const { seen, layout } = capturing();
+    const Link = defineComponent({
+      recipe: button,
+      layout: layout as never,
+      behaviour: ["href"],
+      setup: () => ({ href: "/from-setup" }),
+    });
+    const dispose = mount(Link, { href: "/apps" });
+    expect(seen.p?.href).toBe("/from-setup");
+    dispose();
+  });
+
   test("undeclared props are HTML and reach the element", () => {
     // The bucket that did not exist: `id`, `onClick`, `aria-label` and
     // `data-testid` were swallowed as behaviour and never rendered.

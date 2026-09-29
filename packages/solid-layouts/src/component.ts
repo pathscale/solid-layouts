@@ -429,6 +429,18 @@ export function defineComponent<
         enumerable: true,
       });
     }
+    // A prop the component declares for itself (behaviour) that no setup took
+    // over is read straight from props. Without this a Layout could name its
+    // own prop and never see it: in a library component with no setup,
+    // `p.href` was always undefined, and a layout writing `href={p.href}`
+    // after `{...slot.root}` erased the href the spread had just set.
+    for (const key of behaviourOwn) {
+      if (Object.prototype.hasOwnProperty.call(readable, key)) continue;
+      Object.defineProperty(readable, key, {
+        get: () => props[key],
+        enumerable: true,
+      });
+    }
     Object.defineProperty(readable, "style", {
       get: () => escape.style,
       enumerable: true,
