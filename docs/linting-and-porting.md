@@ -49,6 +49,23 @@ solid-layouts-lint --update-baseline
 
 Baseline diagnostics remain recorded but do not fail the command. A new diagnostic fails normally. Removing debt also makes the baseline stale and fails until it is regenerated, preventing removed patterns from silently returning.
 
+### Compiled semantic-node artifact
+
+The baseline is deliberately readable and repeats paths and messages. For a
+compact content-addressed index of the same checker-owned nodes, use:
+
+```sh
+solid-layouts-lint --root . --artifact dist/layouts.lint-artifact.json
+```
+
+The artifact front-codes the complete sorted Layout path table, interns exact
+`(severity, rule, message)` contracts, and stores source positions grouped by
+file. It retains baseline/current status for every diagnostic and binds the
+result to a SHA-256 identity over every authored `*.layout.tsx`/`*.layout.jsx`
+path and byte sequence. It is compiler output, not a replacement for the
+authored source: expansion reconstructs the exact diagnostic population, while
+the source digest makes stale node boundaries decidable.
+
 ## Application porting mode
 
 Porting mode analyzes existing SolidJS application source. It does not parse the
