@@ -15,6 +15,8 @@ jobs:
         working-directory: packages/solid-layouts
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v1
         with:
@@ -40,6 +42,8 @@ jobs:
     runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
@@ -76,6 +80,8 @@ jobs:
         working-directory: packages/solid-layouts-oxc
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -103,10 +109,13 @@ jobs:
         working-directory: packages/solid-layouts-oxc
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Check out the pinned upstream Solid JSX corpus
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: ryansolid/dom-expressions
           ref: 062d23cc29731e8c2281ddfa36188d438a90e21f
           path: upstream/dom-expressions
@@ -159,6 +168,8 @@ jobs:
     runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v1
         with:
