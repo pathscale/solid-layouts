@@ -86,14 +86,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux runs on Ubicloud; macOS has to be GitHub-hosted because
-          # Ubicloud has no macOS runners.
+          # Linux runs on Ubicloud; macOS and Windows use GitHub-hosted runners.
           - target: x86_64-unknown-linux-gnu
             runner: ubicloud-standard-4
           - target: aarch64-unknown-linux-gnu
             runner: ubicloud-standard-4-arm
           - target: aarch64-apple-darwin
             runner: macos-14
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -118,6 +119,7 @@ jobs:
             x86_64-unknown-linux-gnu)  name=linux-x64-gnu;   lib=libsolid_layouts_oxc.so ;;
             aarch64-unknown-linux-gnu) name=linux-arm64-gnu; lib=libsolid_layouts_oxc.so ;;
             aarch64-apple-darwin)      name=darwin-arm64;    lib=libsolid_layouts_oxc.dylib ;;
+            x86_64-pc-windows-msvc)    name=win32-x64-msvc;  lib=solid_layouts_oxc.dll ;;
           esac
           cp "target/${{ matrix.target }}/release/$lib" "solid-layouts-oxc.$name.node"
 
@@ -166,8 +168,8 @@ jobs:
         working-directory: packages/solid-layouts-oxc
         run: |
           count=$(ls *.node | wc -l)
-          if [ "$count" -ne 3 ]; then
-            echo "expected three bindings, found $count:"; ls *.node
+          if [ "$count" -ne 4 ]; then
+            echo "expected four bindings, found $count:"; ls *.node
             exit 1
           fi
 
