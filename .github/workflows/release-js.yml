@@ -5,12 +5,6 @@ name: Release Solid Layouts JavaScript packages
 # package.json stays the thing a human decided rather than something a bot
 # inferred. Tags still work for an explicit or a repeat release.
 on:
-  push:
-    branches: [master]
-    tags:
-      - "solid-layouts-v*"
-      - "rsbuild-plugin-solid-layouts-v*"
-      - "pathscale-test-ui-v*"
   workflow_dispatch:
     inputs:
       package:
