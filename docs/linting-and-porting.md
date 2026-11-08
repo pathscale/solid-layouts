@@ -25,6 +25,30 @@ Initial rules:
 
 There is no fallback for an error. The library compiler runs the same checks before generating source.
 
+### Named literal recipes
+
+Use a named definition when a declaration emitter needs an explicit recipe
+type while callers still need the exact slot and variant names.
+
+```ts
+import { type Recipe, recipe } from "solid-layouts";
+
+const buttonDefinition = {
+  component: "button",
+  slots: { root: {} },
+  props: { tone: { primary: "button--primary" } },
+} as const;
+
+export const button: Recipe<typeof buttonDefinition> = recipe(buttonDefinition);
+```
+
+Import `recipe` and declare the definition as a private module-level `const`
+before the call.
+It can appear in type queries and must have exactly one runtime use. The
+object can contain nested objects and literal data. The compiler adds the
+lookup table at the call site so `typeof buttonDefinition` retains its
+original shape.
+
 ### Existing migrations
 
 A repository with known debt can use a ratcheting baseline:
