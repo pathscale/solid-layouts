@@ -224,39 +224,44 @@ fn compile_library_source(
     output: LibraryOutput,
     solid: SolidVersion,
 ) -> String {
-    let recipes = compile_recipe::find_recipes(program);
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(program)
+        .semantic;
+    let recipes = compile_recipe::find_recipes(program, semantic.scoping());
     let index = compile_recipe::SlotIndex::build(&recipes);
 
     let mut edits: Vec<SourceEdit> = recipes
         .iter()
         .map(|recipe| {
-            // Just inside the object's closing brace.
-            let at = (recipe.argument_span.end as usize) - 1;
-
-            // A trailing comma is idiomatic and extremely common, and blindly
-            // prefixing another produces `,,` which does not parse. An empty
-            // object needs no separator either. Found by feeding the emitted
-            // file back to the parser rather than by reading the code.
-            let previous = source[..at].trim_end().chars().last();
-            let separator = match previous {
-                Some(',') | Some('{') | None => "",
-                _ => ",",
-            };
-
-            let addition = format!(
-                "{separator}_layouts:{{slots:{},stateKeys:{},slotIds:{}}}",
+            let table = format!(
+                "_layouts:{{slots:{},stateKeys:{},slotIds:{}}}",
                 compile_recipe::table(recipe),
                 compile_recipe::state_keys(recipe),
                 compile_recipe::slot_ids(recipe, &index),
             );
-            SourceEdit::Insert { at, text: addition }
+            match recipe.argument {
+                compile_recipe::RecipeArgument::Inline(span) => {
+                    let at = (span.end as usize) - 1;
+                    let separator = match source[..at].trim_end().chars().last() {
+                        Some(',') | Some('{') | None => "",
+                        _ => ",",
+                    };
+                    SourceEdit::Insert { at, text: format!("{separator}{table}") }
+                }
+                compile_recipe::RecipeArgument::Definition(span) => {
+                    let start = span.start as usize;
+                    let end = span.end as usize;
+                    SourceEdit::Replace {
+                        start,
+                        end,
+                        text: format!("{{ ...{}, {table} }}", &source[start..end]),
+                    }
+                }
+            }
         })
         .collect();
 
-    let semantic = SemanticBuilder::new()
-        .with_build_nodes(true)
-        .build(program)
-        .semantic;
     let unresolved = semantic.scoping().root_unresolved_references();
 
     if output == LibraryOutput::Component && !layouts.is_empty() {

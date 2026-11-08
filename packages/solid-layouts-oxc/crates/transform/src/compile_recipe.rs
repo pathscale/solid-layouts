@@ -11,9 +11,11 @@
 //! resolver for each of them, which is the duplication this exists to remove.
 
 use oxc_ast::ast::{
-    Argument, CallExpression, Expression, ObjectPropertyKind, Program, PropertyKey,
+    Argument, BindingPattern, CallExpression, Expression, IdentifierReference, ObjectExpression,
+    ObjectPropertyKind, Program, PropertyKey, PropertyKind, Statement, VariableDeclarationKind,
 };
 use oxc_ast_visit::Visit;
+use oxc_semantic::Scoping;
 use oxc_span::Span;
 
 /// The classes one variant value contributes.
@@ -36,6 +38,14 @@ pub struct Axis {
     pub values: Vec<(String, VariantClasses)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecipeArgument {
+    /// Insert the compiled table into the inline literal.
+    Inline(Span),
+    /// Wrap the use of a named definition, keeping its inferred type unchanged.
+    Definition(Span),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recipe {
     pub component: String,
@@ -45,9 +55,7 @@ pub struct Recipe {
     pub props: Vec<Axis>,
     pub state: Vec<Axis>,
     pub tailwind: bool,
-    /// The span of the object literal, so the emitted table can be spliced in
-    /// without reformatting anything else in the file.
-    pub argument_span: Span,
+    pub argument: RecipeArgument,
 }
 
 /// Reads a static string, or nothing if the expression is not one.
@@ -132,21 +140,111 @@ fn entries_of<'a, 'b>(
     Some(entries)
 }
 
-/// Reads a `recipe({...})` call into its static configuration.
-///
-/// Returns nothing when any part of the declaration is not a literal. That is
-/// not a failure: it means this recipe cannot be compiled and the runtime
-/// resolves it as before. Guessing at a computed value would bake in whatever
-/// the expression happened to look like at compile time.
-pub fn read(call: &CallExpression<'_>) -> Option<Recipe> {
+// Named definitions must be inert data. In particular, a spread, getter or
+// prototype setter would make copying the object at the call site observable.
+fn plain_literal(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::ObjectExpression(object) => object.properties.iter().all(|property| {
+            let ObjectPropertyKind::ObjectProperty(property) = property else {
+                return false;
+            };
+            property.kind == PropertyKind::Init
+                && !property.computed
+                && !property.method
+                && !property.shorthand
+                && key_of(&property.key).is_some_and(|key| key != "__proto__")
+                && plain_literal(&property.value)
+        }),
+        Expression::StringLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        _ => false,
+    }
+}
+
+fn local_definition<'a, 'b>(
+    program: &'b Program<'a>,
+    scoping: &Scoping,
+    reference: &IdentifierReference<'a>,
+) -> Option<&'b ObjectExpression<'a>> {
+    // Only a module-private const can be resolved this way. A type query is
+    // fine, but another runtime use could expose or mutate the object.
+    if !program.source_type.is_module() || scoping.root_scope_flags().contains_direct_eval() {
+        return None;
+    }
+    let reference_id = reference.reference_id.get()?;
+    let symbol_id = scoping.get_reference(reference_id).symbol_id()?;
+    if scoping
+        .get_resolved_reference_ids(symbol_id)
+        .iter()
+        .any(|id| *id != reference_id && scoping.get_reference(*id).is_value())
+    {
+        return None;
+    }
+
+    for statement in &program.body {
+        // Do not unwrap export declarations. Exported values can be
+        // mutated by another module without a reference in this file.
+        let Statement::VariableDeclaration(declaration) = statement else {
+            continue;
+        };
+        if declaration.kind != VariableDeclarationKind::Const {
+            continue;
+        }
+        for declarator in &declaration.declarations {
+            let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                continue;
+            };
+            if binding.symbol_id.get() != Some(symbol_id)
+                || declarator.span.end > reference.span.start
+            {
+                continue;
+            }
+            let Expression::TSAsExpression(assertion) = declarator.init.as_ref()? else {
+                return None;
+            };
+            if !assertion.type_annotation.is_const_type_reference()
+                || !plain_literal(&assertion.expression)
+            {
+                return None;
+            }
+            let Expression::ObjectExpression(object) = &assertion.expression else {
+                return None;
+            };
+            return Some(object);
+        }
+    }
+    None
+}
+
+/// Reads an inline recipe or a recipe taking a private literal definition.
+/// Unsupported expressions are left for the runtime.
+pub(crate) fn read<'a>(
+    call: &CallExpression<'a>,
+    program: &Program<'a>,
+    scoping: &Scoping,
+) -> Option<Recipe> {
     let Expression::Identifier(callee) = &call.callee else {
         return None;
     };
     if callee.name != "recipe" {
         return None;
     }
-    let [Argument::ObjectExpression(object)] = call.arguments.as_slice() else {
-        return None;
+    let (object, argument) = match call.arguments.as_slice() {
+        [Argument::ObjectExpression(object)] => (&**object, RecipeArgument::Inline(object.span)),
+        [Argument::Identifier(reference)] => {
+            let callee_id = callee.reference_id.get()?;
+            let symbol_id = scoping.get_reference(callee_id).symbol_id()?;
+            if !scoping.symbol_flags(symbol_id).is_import() {
+                return None;
+            }
+            (
+                local_definition(program, scoping, reference)?,
+                RecipeArgument::Definition(reference.span),
+            )
+        }
+        _ => return None,
     };
 
     let mut component = None;
@@ -197,7 +295,7 @@ pub fn read(call: &CallExpression<'_>) -> Option<Recipe> {
         props,
         state,
         tailwind,
-        argument_span: object.span,
+        argument,
     })
 }
 
@@ -363,22 +461,28 @@ fn json_string(text: &str) -> String {
     out
 }
 
-/// Finds every compilable `recipe({...})` call in a file.
-pub struct RecipeCollector {
-    pub found: Vec<Recipe>,
+/// Finds every compilable recipe call in a file.
+struct RecipeCollector<'a, 'b> {
+    program: &'b Program<'a>,
+    scoping: &'b Scoping,
+    found: Vec<Recipe>,
 }
 
-impl<'a> Visit<'a> for RecipeCollector {
+impl<'a> Visit<'a> for RecipeCollector<'a, '_> {
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
-        if let Some(recipe) = read(call) {
+        if let Some(recipe) = read(call, self.program, self.scoping) {
             self.found.push(recipe);
         }
         oxc_ast_visit::walk::walk_call_expression(self, call);
     }
 }
 
-pub fn find_recipes(program: &Program<'_>) -> Vec<Recipe> {
-    let mut collector = RecipeCollector { found: Vec::new() };
+pub(crate) fn find_recipes<'a>(program: &Program<'a>, scoping: &Scoping) -> Vec<Recipe> {
+    let mut collector = RecipeCollector {
+        program,
+        scoping,
+        found: Vec::new(),
+    };
     collector.visit_program(program);
     collector.found
 }
@@ -389,6 +493,7 @@ mod tests {
     use layouts_common::TransformOptions;
     use oxc_allocator::Allocator;
     use oxc_parser::Parser;
+    use oxc_semantic::SemanticBuilder;
     use oxc_span::SourceType;
 
     fn compile(source: &str) -> String {
@@ -403,7 +508,56 @@ mod tests {
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
         assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
-        find_recipes(&parsed.program).into_iter().next()
+        let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+        find_recipes(&parsed.program, semantic.scoping())
+            .into_iter()
+            .next()
+    }
+
+    const NAMED_RECIPE: &str = r#"
+    import { recipe, type Recipe } from "solid-layouts";
+    const definition = {
+      component: "badge",
+      slots: { root: { base: "badge" } },
+      props: { tone: { info: "badge--info" } },
+    } as const;
+    export const badge: Recipe<typeof definition> = recipe(definition);
+    "#;
+
+    #[test]
+    fn named_recipe_keeps_the_literal_type_and_compiles_its_table() {
+        let output = compile(NAMED_RECIPE);
+        assert!(output.contains("} as const;"), "{output}");
+        assert!(output.contains("recipe({ ...definition, _layouts:"), "{output}");
+        assert!(output.contains(r#""info":"badge--info""#), "{output}");
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &output, SourceType::tsx()).parse();
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    }
+
+    #[test]
+    fn named_recipe_does_not_resolve_computed_or_escaping_definitions() {
+        let cases = [
+            NAMED_RECIPE.replace("const definition", "let definition"),
+            NAMED_RECIPE.replace("const definition", "export const definition"),
+            NAMED_RECIPE.replace("base: \"badge\"", "get base() { return \"badge\"; }"),
+            NAMED_RECIPE.replace("\"badge--info\"", "computed()"),
+            format!("{NAMED_RECIPE}\nexport {{ definition }};"),
+            format!("{NAMED_RECIPE}\nconsume(definition);"),
+            format!("{NAMED_RECIPE}\neval(\"definition.slots.root.base = 'other'\");"),
+            NAMED_RECIPE.replace(
+                "recipe(definition)",
+                "((definition) => recipe(definition))(other)",
+            ),
+            NAMED_RECIPE.replace(
+                "recipe(definition)",
+                "((recipe) => recipe(definition))(other)",
+            ),
+        ];
+        for source in cases {
+            assert!(read_one(&source).is_none(), "{source}");
+            assert!(!compile(&source).contains("_layouts:"), "{source}");
+        }
     }
 
     const BADGE: &str = r#"
@@ -613,13 +767,15 @@ mod id_tests {
     use super::*;
     use oxc_allocator::Allocator;
     use oxc_parser::Parser;
+    use oxc_semantic::SemanticBuilder;
     use oxc_span::SourceType;
 
     fn recipes(source: &str) -> Vec<Recipe> {
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
         assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
-        find_recipes(&parsed.program)
+        let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+        find_recipes(&parsed.program, semantic.scoping())
     }
 
     const TWO: &str = r#"

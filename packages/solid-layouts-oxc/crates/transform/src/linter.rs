@@ -12,6 +12,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
+use oxc_semantic::SemanticBuilder;
 use oxc_span::{GetSpan, SourceType, Span};
 
 use crate::compile_recipe::{self, Recipe, VariantClasses};
@@ -55,6 +56,7 @@ fn variable_declaration<'a, 'b>(
 }
 
 fn named_recipes(program: &Program<'_>) -> (Vec<NamedRecipe>, Vec<Diagnostic>) {
+    let semantic = SemanticBuilder::new().build(program).semantic;
     let mut recipes = Vec::new();
     let mut diagnostics = Vec::new();
     for statement in &program.body {
@@ -74,7 +76,7 @@ fn named_recipes(program: &Program<'_>) -> (Vec<NamedRecipe>, Vec<Diagnostic>) {
             if callee.name != "recipe" {
                 continue;
             }
-            match compile_recipe::read(call) {
+            match compile_recipe::read(call, program, semantic.scoping()) {
                 Some(recipe) => recipes.push(NamedRecipe {
                     name: binding.name.to_string(),
                     recipe,
@@ -82,7 +84,7 @@ fn named_recipes(program: &Program<'_>) -> (Vec<NamedRecipe>, Vec<Diagnostic>) {
                 }),
                 None => diagnostics.push(Diagnostic::error(
                     format!(
-                        "recipe `{}` must use a statically analyzable object literal",
+                        "recipe `{}` must use an object literal or a private, single-use const object declared as const",
                         binding.name
                     ),
                     declarator.span,
@@ -879,6 +881,23 @@ export const button = recipe({
   state: { pressed: { true: "button--pressed" } },
 });
 "#;
+
+    #[test]
+    fn named_recipe_is_linted_with_its_real_slots() {
+        let source = r#"
+          import { recipe, type Recipe } from "solid-layouts";
+          const definition = { component: "button", slots: { icon: {} } } as const;
+          export const button: Recipe<typeof definition> = recipe(definition);
+        "#;
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        let (recipes, diagnostics) = named_recipes(&parsed.program);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(recipes[0].recipe.slots, vec![("icon".to_owned(), None)]);
+        assert!(lint_recipe(&recipes[0]).iter().any(|(_, diagnostic)| {
+            diagnostic.message.contains("root")
+        }));
+    }
 
     #[test]
     fn a_recipe_and_layout_with_exact_slots_are_clean() {
