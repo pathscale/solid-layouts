@@ -37,6 +37,7 @@
     "*.d.ts",
     "loader.js",
     "library.js",
+    "lint-artifact.js",
     "application.js",
     "porting.js",
     "bin",
@@ -54,7 +55,7 @@
   "scripts": {
     "build": "napi build --platform --release --features napi",
     "build:debug": "napi build --platform --features napi",
-    "test:library": "bun test library.test.js",
+    "test:library": "bun test library.test.js lint-artifact.test.js",
     "test:application": "bun test application.test.js",
     "test:upstream-solid": "bun test upstream-solid.test.js"
   },
